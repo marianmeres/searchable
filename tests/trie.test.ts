@@ -87,4 +87,16 @@ suite.test('remove works', () => {
 	assert('2,4' === trie.find('h').getValues().sort().join(','));
 });
 
+suite.test('dump & restore', () => {
+	const trie = new Trie();
+	trie.insert('james', [7]);
+	trie.insert('bond', [7]);
+	assert('7' === trie.find('bon').getValues().join(','));
+
+	//
+	const trie2 = new Trie();
+	trie2.restore(JSON.parse(JSON.stringify(trie.dump())));
+	assert('7' === trie2.find('bon').getValues().join(','));
+});
+
 export default suite;

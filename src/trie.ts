@@ -146,6 +146,7 @@ export class Trie {
 					words[prefix] ||= [];
 					words[prefix] = [...words[prefix], ...child[Trie.DUMP_VALUES_KEY]];
 					_walk(_dump[key], prefix);
+					prefix = '';
 				}
 			}
 		};

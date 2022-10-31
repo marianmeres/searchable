@@ -117,4 +117,22 @@ suite.test('processResults and querySomeWordMinLength example', () => {
 	assert(found[0].foo === 'BAR');
 });
 
+suite.test('index is serializable', () => {
+	const index = new Searchable();
+	index.add('james bond', 7);
+	const dump = index.dump();
+	assert(typeof dump === 'string');
+
+	const index2 = new Searchable();
+	index2.restore(dump);
+	assert(7 === index2.search('bond')[0]);
+
+	// this unserializable example does NOT work for dump & restore:
+	index.add('foo', { foo: Symbol() });
+	const index3 = new Searchable();
+	index3.restore(index.dump());
+	// we get `{}` instead of `{ foo: ... }`, so:
+	assert(undefined === index3.search('foo')[0].foo);
+});
+
 export default suite;

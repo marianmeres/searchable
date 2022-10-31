@@ -135,3 +135,25 @@ assert(index.search('kůň')[0]);
 assert(!index.search('kun')[0]);
 ```
 
+Index can be serialized. Note however, that all stored values must suppport
+`JSON.stringify` for this to work.
+
+```javascript
+const index = new Searchable();
+index.add('james bond', 7);
+const dump = index.dump();
+assert(typeof dump === 'string');
+
+// dump can now be saved to file, db, etc...
+
+// now restore
+const index2 = new Searchable();
+index2.restore(dump);
+assert(7 === index2.search('bond')[0]);
+
+// this example would NOT work for dump & restore:
+index.add('foo', { [Symbol()]: 'bar' });
+const index3 = new Searchable();
+index3.restore(index.dump());
+console.log(index3.search('foo'));
+```

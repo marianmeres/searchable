@@ -105,10 +105,13 @@ export class Searchable {
 
 	//
 	dump() {
-		return this._index.dump();
+		return JSON.stringify(this._index.dump());
 	}
 
 	restore(dump) {
+		if (typeof dump === 'string') {
+			dump = JSON.parse(dump);
+		}
 		this._index.restore(dump);
 		return this;
 	}

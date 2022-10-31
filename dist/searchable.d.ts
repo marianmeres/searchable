@@ -21,7 +21,7 @@ export declare class Searchable {
     toWords(input: string): string[];
     add(searchable: string, value: any): boolean;
     search(searchQuery: string): any[];
-    dump(): Partial<import("./trie.js").TrieNodeDTO>;
+    dump(): string;
     restore(dump: any): this;
 }
 export {};
