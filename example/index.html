@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Searchable demo</title>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-Zenh87qX5JnK2Jl0vWa8Ck2rdkQ2Bzep5IDxbcnCeuOxjzrPF/et3URy9Bv1WTRi" crossorigin="anonymous">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+	<style>
+		body {
+			padding: 2rem;
+			height: 100vh;
+		}
+		#console {
+			color: gray;
+		}
+		#console .title {
+			color: black;
+			font-weight: bold;
+		}
+		#console .year {
+			color: black;
+		}
+		#console .genres {
+			color: black;
+		}
+	</style>
+</head>
+<body>
+<div class="d-flex flex-column" style="height: 100%; background: white;">
+	<h1 class="mb-3">
+		<code>@marianmeres/searchable</code> example
+	</h1>
+	<p>See <a href="https://github.com/marianmeres/searchable">https://github.com/marianmeres/searchable</a>
+		for more info.</p>
+	<div class="form-floating mb-3 p-1 rounded" style="background: lightskyblue;">
+		<input type="text" class="form-control" id="query" placeholder="Type your query here...">
+		<label for="query">Start typing your query here...</label>
+	</div>
+
+	<div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
+		<span>Examples: </span>
+		<a
+			data-query="schwarzenegger after:1990 before:2000"
+			class="btn btn-sm btn-outline-secondary">Arnold's movies of the 90's</a>
+
+		<a
+			data-query="james bond daniel craig"
+			class="btn btn-sm btn-outline-secondary">Daniel Craig as James Bond</a>
+
+		<a
+			data-query="before:2000 action horror"
+			class="btn btn-sm btn-outline-secondary">Action horrors from 20th century</a>
+
+	</div>
+
+	<div class="flex-fill mb-0 font-monospace small" id="console"
+	 	style="overflow-y: auto; background: rgb(240, 240, 240); padding: 1rem;"
+	>Please wait...</div>
+	<p class="small text-muted mt-3 mb-0">
+		Dataset from <a class="text-muted" href="https://github.com/bbrumm/databasestar" target="_blank">
+		databasestar.com</a>.
+	</p>
+</div>
+<script type="module">
+	const $log = document.getElementById('console');
+	const $input = document.getElementById('query');
+	let searchEnabled = false;
+	let lastQueryTs;
+	let lastDuration;
+
+	// initialize index
+	const worker = new Worker("worker.js", { type: "module" });
+	worker.addEventListener('message', ({ data }) => {
+		if (data?.response === 'results') {
+			searchEnabled = true;
+			if (lastQueryTs) {
+				lastDuration = Date.now() - lastQueryTs;
+				lastQueryTs = null;
+			}
+			render(data.data);
+		}
+	});
+	worker.postMessage({ command: 'init' });
+
+	//
+	const _search = (value) => {
+		if (searchEnabled) {
+			lastQueryTs = Date.now();
+			worker.postMessage({ command: 'search', data: value });
+		}
+	}
+	const search = _.debounce(_search, 200);
+	$input.addEventListener('keydown', (e) => setTimeout(() => search(e.target.value), 0));
+	$input.addEventListener('paste', (e) => setTimeout(() => search(e.target.value), 0));
+	$input.addEventListener('change', (e) => setTimeout(() => search(e.target.value), 0));
+
+	const render = (results) => {
+		results ||= [];
+		let out = results.map((m) => {
+			let actChar = m.actors.reduce((memo, v, i) => {
+				memo.push(`${v} (${m.characters[i]})`);
+				return memo;
+			}, []).join(', ');
+			return [
+				`&rarr; `,
+				`<span class="title">${m.title}</span> `,
+				`<span class="year">(${m.year}, ${m.directors.join(', ')})</span> `,
+				`<span class="genres">/ ${m.genres.join(', ')}</span> `,
+				`<br/><span class="tagline">${actChar}</span> `,
+				//`<br/><span class="tagline">${m.tagline}</span> `,
+				//`<span class="overview">&mdash; ${m.overview}</span> `,
+				`<br/>`
+			].join('');
+		})
+			.slice(0, 1000);
+
+		if (results.length > 1000) {
+			out.push(
+				`\n<span style="color: gray;">...next ${results.length - 1000} results omitted...</span>`
+			)
+		}
+
+		let dur = '';
+		if (lastDuration) {
+			dur = `(Found ${results.length} matching out of ~2500 total records in ${lastDuration} ms)<br/><br/>`;
+		}
+
+		$log.innerHTML = dur + out.join('<br />');
+	}
+
+	// predefined
+	document.querySelectorAll('[data-query]').forEach(($el) => {
+		$el.addEventListener('click', () => {
+			$input.value = $el.dataset.query;
+			$input.dispatchEvent(new Event('change'));
+		})
+	});
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+{
+  "name": "@marianmeres/searchable",
+  "version": "1.0.0",
+  "description": "Searchable index",
+  "type": "module",
+  "main": "dist/searchable.cjs.js",
+  "module": "dist/searchable.esm.js",
+  "browser": "dist/searchable.umd.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist/*",
+    "prettier": "prettier --write \"{src,tests}/**/*.{js,ts,json}\"",
+    "release": "node release.cjs",
+    "test": "node --loader ts-node/esm tests/index.ts",
+    "test:watch": "nodemon --delay 0.5 -q --watch \"src/**/*.*\" --watch \"tests/**/*.*\" --exec \"node --loader ts-node/esm tests/index.ts\" --",
+    "build": "rollup -c",
+    "dev": "rollup -c -w"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marianmeres/searchable.git"
+  },
+  "keywords": [
+    "search",
+    "index"
+  ],
+  "author": "Marian Meres <marian@meres.sk>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/marianmeres/searchable/issues"
+  },
+  "homepage": "https://github.com/marianmeres/searchable#readme",
+  "devDependencies": {
+    "@marianmeres/test-runner": "^2.0.10",
+    "@rollup/plugin-commonjs": "^23.0.2",
+    "@rollup/plugin-node-resolve": "^15.0.1",
+    "@rollup/plugin-terser": "^0.1.0",
+    "@rollup/plugin-typescript": "^9.0.2",
+    "@types/node": "^18.11.6",
+    "install": "^0.13.0",
+    "kleur": "^4.1.5",
+    "lodash": "^4.17.21",
+    "lodash-es": "^4.17.21",
+    "minimist": "^1.2.7",
+    "npm": "^8.19.2",
+    "prettier": "^2.7.1",
+    "prompt": "^1.3.0",
+    "rimraf": "^3.0.2",
+    "rollup": "^3.2.3",
+    "terser": "^5.15.1",
+    "ts-node": "^10.9.1",
+    "tslib": "^2.4.0",
+    "typescript": "^4.8.4"
+  }
+}
