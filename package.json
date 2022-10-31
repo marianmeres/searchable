@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/searchable",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Searchable index",
   "type": "module",
   "main": "dist/searchable.cjs.js",
