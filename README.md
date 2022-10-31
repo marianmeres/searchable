@@ -152,8 +152,9 @@ index2.restore(dump);
 assert(7 === index2.search('bond')[0]);
 
 // this example would NOT work for dump & restore:
-index.add('foo', { [Symbol()]: 'bar' });
+index.add('foo', { foo: Symbol() });
 const index3 = new Searchable();
 index3.restore(index.dump());
-console.log(index3.search('foo'));
+// we get `{}` instead of `{ foo: ... }`, so:
+assert(undefined === index3.search('foo')[0].foo);
 ```
