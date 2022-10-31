@@ -88,8 +88,6 @@ suite.test('normalize example', () => {
 	index.add('football', true);
 
 	assert(index.search('sport')[0]);
-	assert(index.search('football')[0]);
-	assert(!index.search('golf')[0]);
 });
 
 suite.test('processResults and querySomeWordMinLength example', () => {
