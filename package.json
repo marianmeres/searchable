@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/searchable",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Searchable index",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -10,7 +10,6 @@
     "require": "./dist/index.cjs",
     "import": "./dist/index.js"
   },
-
   "files": [
     "dist"
   ],
