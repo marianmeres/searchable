@@ -79,7 +79,7 @@ suite.test('case sensitivity example', () => {
 suite.test('normalize example', () => {
 	const index = new Searchable({
 		normalizeWord: (w) => {
-			const sports = { basketball: 'sport', football: 'sport' };
+			const sports = { basketball: 'sport', football: [ 'sport', 'soccer' ] };
 			return sports[w] || w;
 		},
 	});
@@ -88,6 +88,7 @@ suite.test('normalize example', () => {
 	index.add('football', true);
 
 	assert(index.search('sport')[0]);
+	assert(index.search('soccer')[0]);
 });
 
 suite.test('processResults and querySomeWordMinLength example', () => {

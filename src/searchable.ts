@@ -11,7 +11,7 @@ interface SearchableOptions {
 	accentSensitive: boolean;
 	isStopword: (word: string) => boolean;
 	// stemmer, spell check, ...
-	normalizeWord: (word: string) => string;
+	normalizeWord: (word: string) => string | string[];
 	processResults: (results, parseQueryResults: ParseQueryResult) => any[];
 	parseQuery: (query: string) => ParseQueryResult;
 	querySomeWordMinLength: number;
@@ -42,21 +42,31 @@ export class Searchable {
 		return this;
 	}
 
-	toWords(input: string) {
-		let words = `${input}`
+	toWords(input: string): string[] {
+		let words: any = `${input}`
 			.trim()
 			.replace(/\s\s+/g, ' ')
 			.split(' ')
-			.map((w) => {
-				// checking stopword twice: both before and after normalization
-				if (this.options.isStopword(w)) w = null;
-				if (w) w = this.options.normalizeWord(w);
-				if (w && this.options.isStopword(w)) w = null;
-				if (w && !this.options.caseSensitive) w = w.toLowerCase();
-				if (w && !this.options.accentSensitive) w = unaccent(w);
-				return w;
-			})
-			.filter(Boolean);
+			// checking stopword twice: both before and after normalization
+			.filter((w) => w && !this.options.isStopword(w));
+
+		// normalizeWord can return array of new words
+		words = words.reduce((m, w) => {
+			w = this.options.normalizeWord(w);
+			if (w && Array.isArray(w)) {
+				m = [...m, ...w];
+			} else if (w) {
+				m.push(w);
+			}
+			return m;
+		}, []);
+
+		words = words.map((w) => {
+			if (w && this.options.isStopword(w)) w = null;
+			if (w && !this.options.caseSensitive) w = w.toLowerCase();
+			if (w && !this.options.accentSensitive) w = unaccent(w);
+			return w;
+		}).filter(Boolean)
 
 		// unique
 		return Array.from(new Set(words));

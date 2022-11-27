@@ -80,7 +80,8 @@ const index = new Searchable({
 
     // any custom normalization applied before adding to index or used for query
     // usefull for e.g.: stemming, spellcheck, now-word chars removal, custom conversion...
-    normalizeWord: (word): string => word,
+	// can return array of words (e.g. aliases)
+    normalizeWord: (word): string | string[] => word,
 
     // any custom logic applied to query before being used for search
     // should return `{ query, operators }` shape, where:
@@ -106,7 +107,7 @@ Word normalization example
 const index = new Searchable({
     // will be applied to both label in the index and the query
     normalizeWord: (w) => {
-        const sports = { basketball: 'sport', football: 'sport' };
+        const sports = { basketball: 'sport', football: [ 'sport', 'soccer' ] };
         return sports[w] || w;
     }
 });
@@ -115,6 +116,7 @@ index.add('basketball', true);
 index.add('football', true);
 
 assert(index.search('sport')[0]);
+assert(index.search('soccer')[0]);
 ```
 
 Accent sensitivity example
@@ -135,7 +137,7 @@ assert(index.search('kůň')[0]);
 assert(!index.search('kun')[0]);
 ```
 
-Index can be serialized. Note however, that all stored values must suppport
+Index can be serialized. Note however, that all stored values **must suppport**
 `JSON.stringify` for this to work.
 
 ```javascript
@@ -150,11 +152,4 @@ assert(typeof dump === 'string');
 const index2 = new Searchable();
 index2.restore(dump);
 assert(7 === index2.search('bond')[0]);
-
-// this example would NOT work for dump & restore:
-index.add('foo', { foo: Symbol() });
-const index3 = new Searchable();
-index3.restore(index.dump());
-// we get `{}` instead of `{ foo: ... }`, so:
-assert(undefined === index3.search('foo')[0].foo);
 ```
