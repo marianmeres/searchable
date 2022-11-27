@@ -3,9 +3,14 @@
   "version": "1.0.3",
   "description": "Searchable index",
   "type": "module",
-  "main": "dist/searchable.cjs.js",
-  "module": "dist/searchable.esm.js",
-  "browser": "dist/searchable.umd.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "browser": "./dist/index.umd.js",
+  "exports": {
+    "require": "./dist/index.cjs",
+    "import": "./dist/index.js"
+  },
+
   "files": [
     "dist"
   ],
@@ -16,7 +21,7 @@
     "test": "node --loader ts-node/esm tests/index.ts",
     "test:watch": "nodemon --delay 0.5 -q --watch \"src/**/*.*\" --watch \"tests/**/*.*\" --exec \"node --loader ts-node/esm tests/index.ts\" --",
     "build": "npm run clean && rollup -c",
-    "dev": "rollup -c -w"
+    "dev": "npm run clean && rollup -c -w"
   },
   "repository": {
     "type": "git",
