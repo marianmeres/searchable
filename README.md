@@ -80,7 +80,7 @@ const index = new Searchable({
 
     // any custom normalization applied before adding to index or used for query
     // usefull for e.g.: stemming, spellcheck, now-word chars removal, custom conversion...
-	// can return array of words (e.g. aliases)
+    // can return array of words (e.g. aliases)
     normalizeWord: (word): string | string[] => word,
 
     // any custom logic applied to query before being used for search
