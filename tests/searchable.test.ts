@@ -80,15 +80,17 @@ suite.test('normalize example', () => {
 	const index = new Searchable({
 		normalizeWord: (w) => {
 			const sports = { basketball: 'sport', football: [ 'sport', 'soccer' ] };
-			return sports[w] || w;
+			return sports[w.toLowerCase()] || w;
 		},
 	});
 
-	index.add('basketball', true);
-	index.add('football', true);
+	index.add('basketball', 'basketball');
+	index.add('football', 'football');
 
-	assert(index.search('sport')[0]);
-	assert(index.search('soccer')[0]);
+	assert(index.search('sport').length === 2); // ['basketball', 'football']
+
+	assert(index.search('soccer').length === 1);
+	assert(index.search('soccer')[0] === 'football');
 });
 
 suite.test('processResults and querySomeWordMinLength example', () => {

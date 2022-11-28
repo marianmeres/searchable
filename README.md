@@ -108,15 +108,17 @@ const index = new Searchable({
     // will be applied to both label in the index and the query
     normalizeWord: (w) => {
         const sports = { basketball: 'sport', football: [ 'sport', 'soccer' ] };
-        return sports[w] || w;
+		return sports[w.toLowerCase()] || w;
     }
 });
 
-index.add('basketball', true);
-index.add('football', true);
+index.add('basketball', 'basketball');
+index.add('football', 'football');
 
-assert(index.search('sport')[0]);
-assert(index.search('soccer')[0]);
+assert(index.search('sport').length === 2); // ['basketball', 'football']
+
+assert(index.search('soccer').length === 1);
+assert(index.search('soccer')[0] === 'football');
 ```
 
 Accent sensitivity example
