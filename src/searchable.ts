@@ -42,10 +42,11 @@ export class Searchable {
 		return this;
 	}
 
+	// exposing as utility fn, might be handy...
+	static normalizeInput = (input: string) => `${input}`.replace(/\s+/g, ' ').trim();
+
 	toWords(input: string): string[] {
-		let words: any = `${input}`
-			.trim()
-			.replace(/\s+/g, ' ')
+		let words: any = Searchable.normalizeInput(input)
 			.split(' ')
 			// checking stopword twice: both before and after normalization
 			.filter((w) => w && !this.options.isStopword(w));
@@ -61,12 +62,14 @@ export class Searchable {
 			return m;
 		}, []);
 
-		words = words.map((w) => {
-			if (w && this.options.isStopword(w)) w = null;
-			if (w && !this.options.caseSensitive) w = w.toLowerCase();
-			if (w && !this.options.accentSensitive) w = unaccent(w);
-			return w;
-		}).filter(Boolean)
+		words = words
+			.map((w) => {
+				if (w && this.options.isStopword(w)) w = null;
+				if (w && !this.options.caseSensitive) w = w.toLowerCase();
+				if (w && !this.options.accentSensitive) w = unaccent(w);
+				return w;
+			})
+			.filter(Boolean);
 
 		// unique
 		return Array.from(new Set(words));

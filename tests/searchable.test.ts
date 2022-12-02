@@ -79,7 +79,7 @@ suite.test('case sensitivity example', () => {
 suite.test('normalize example', () => {
 	const index = new Searchable({
 		normalizeWord: (w) => {
-			const sports = { basketball: 'sport', football: [ 'sport', 'soccer' ] };
+			const sports = { basketball: 'sport', football: ['sport', 'soccer'] };
 			return sports[w.toLowerCase()] || w;
 		},
 	});
