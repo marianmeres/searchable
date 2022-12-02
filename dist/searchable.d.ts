@@ -18,7 +18,7 @@ export declare class Searchable {
     protected _index: Trie;
     constructor(options?: Partial<SearchableOptions>);
     clear(): this;
-    static toWordsInputNormalize: (input: string) => string;
+    static normalizeInput: (input: string) => string;
     toWords(input: string): string[];
     add(searchable: string, value: any): boolean;
     search(searchQuery: string): any[];
