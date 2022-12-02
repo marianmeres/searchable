@@ -45,7 +45,7 @@ export class Searchable {
 	toWords(input: string): string[] {
 		let words: any = `${input}`
 			.trim()
-			.replace(/\s\s+/g, ' ')
+			.replace(/\s+/g, ' ')
 			.split(' ')
 			// checking stopword twice: both before and after normalization
 			.filter((w) => w && !this.options.isStopword(w));
