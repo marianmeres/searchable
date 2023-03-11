@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/searchable",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Searchable index",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -10,6 +10,7 @@
     "require": "./dist/index.cjs",
     "import": "./dist/index.js"
   },
+  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
@@ -37,7 +38,7 @@
   },
   "homepage": "https://github.com/marianmeres/searchable#readme",
   "devDependencies": {
-    "@marianmeres/release": "^0.0.7",
+    "@marianmeres/release": "^0.0.9",
     "@marianmeres/test-runner": "^2.0.10",
     "@rollup/plugin-commonjs": "^23.0.2",
     "@rollup/plugin-node-resolve": "^15.0.1",
