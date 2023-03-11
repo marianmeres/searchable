@@ -8,7 +8,7 @@ Useful for fast in-memory filtering of ahead-of-time known set of objects
 (autosuggestions, typeahead or similar).
 
 ## Real world example
-See http://searchable.meres.sk/example/ ([source](./example/)) for more real-world
+See https://searchable.meres.sk/example/ ([source](./example/)) for more real-world
 like example.
 
 ## Installation
