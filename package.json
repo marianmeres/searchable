@@ -38,7 +38,7 @@
   },
   "homepage": "https://github.com/marianmeres/searchable#readme",
   "devDependencies": {
-    "@marianmeres/release": "^0.0.9",
+    "@marianmeres/release": "^1.0.0",
     "@marianmeres/test-runner": "^2.0.10",
     "@rollup/plugin-commonjs": "^23.0.2",
     "@rollup/plugin-node-resolve": "^15.0.1",
