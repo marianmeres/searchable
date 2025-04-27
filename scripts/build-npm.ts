@@ -5,10 +5,7 @@ import { join } from "@std/path";
 import denoJson from "../deno.json" with { type: "json" };
 
 /**
- * This is quick-n-dirty npm package build script... as importing with `pnpm dlx jsr add @marianmeres/clog`
- * has its limitation sometimes.
- *
- * This is a trivial one file source with no deps, so, it's easy...
+ * This is quick-n-dirty npm package build script...
  */
 
 const TS_TO_JS_REGEX =

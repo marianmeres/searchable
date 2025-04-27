@@ -9,7 +9,7 @@ class TrieNode {
 	constructor(
 		/** Map of character to TrieNode */
 		public children: Map<string, TrieNode> = new Map<string, TrieNode>(),
-		/** Flag if this char represens end of word */
+		/** Flag if this char represents end of word */
 		public isEOW: boolean = false,
 		/** Set of docIds associated with this word */
 		public docIds: Set<string> = new Set<string>()

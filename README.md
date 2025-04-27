@@ -54,7 +54,7 @@ const index = new Searchable({
     isStopword: (word): boolean => false,
 
     // Any custom normalization applied before adding to index or used for query
-    // useful for e.g.: stemming, custom conversion... Can return array of words (e.g. aliases).
+    // useful for e.g.: stemming, custom conversion... Can return array of words (aliases).
     normalizeWord: (word): string | string[] => word,
 
     // Will skip search altogether if none of the query words is longer than this limit.
