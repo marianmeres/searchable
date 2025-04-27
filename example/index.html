@@ -146,7 +146,7 @@
 			});
 
 			const search = debounce((v) => {
-				console.log("query", v);
+				// console.log("query", v);
 				const start = Date.now();
 				const docIds = $fuzzy.checked
 					? index.searchFuzzy(v)
