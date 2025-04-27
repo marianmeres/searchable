@@ -1,15 +1,13 @@
 // deno-lint-ignore-file no-explicit-any
 
 import { assertEquals } from "@std/assert";
-import { TrieIndex } from "../src/lib/trie.ts";
+import { InvertedIndex } from "../src/lib/inverted.ts";
 
-Deno.test("trie sanity check", () => {
-	const idx = new TrieIndex();
+Deno.test("inverted index works", () => {
+	const idx = new InvertedIndex();
 	idx.addWord("foo", "1");
 	idx.addWord("foo", "2");
 	idx.addWord("bar", "3");
-
-	// console.log(JSON.stringify(idx, null, 4));
 
 	assertEquals(idx.wordCount, 2);
 	assertEquals(idx.docIdCount, 3);
@@ -21,17 +19,19 @@ Deno.test("trie sanity check", () => {
 	let dump = dump1;
 
 	assertEquals(dump.words, { foo: ["1", "2"], bar: ["3"] });
+	// assertEquals(dump.docIdToWords, { 1: ["foo"], 2: ["foo"], 3: ["bar"] });
 
 	idx.removeWord("foo", "2");
 
 	dump = idx.dump();
 	assertEquals(dump.words, { foo: ["1"], bar: ["3"] });
-	// console.log(idx.wordCount, dump, idx.getAllDocIds());
+	// assertEquals(dump.docIdToWords, { 1: ["foo"], 3: ["bar"] });
 
 	// restore the initial
 	idx.restore(dump1);
 	dump = idx.dump();
 	assertEquals(dump.words, { foo: ["1", "2"], bar: ["3"] });
+	// assertEquals(dump.docIdToWords, { 1: ["foo"], 2: ["foo"], 3: ["bar"] });
 
 	//
 	let res: any = idx.searchExact("foo");
@@ -39,9 +39,6 @@ Deno.test("trie sanity check", () => {
 
 	res = idx.searchExact("bar");
 	assertEquals(res, ["3"]);
-
-	res = idx.searchExact("fooo");
-	assertEquals(res, []);
 
 	res = idx.searchExact("hey");
 	assertEquals(res, []);
@@ -55,6 +52,7 @@ Deno.test("trie sanity check", () => {
 
 	res = idx.searchByPrefix("fo", true);
 	assertEquals(res, { 1: 1, 2: 1 });
+	// console.log(res);
 
 	res = idx.searchByPrefix("fooo");
 	assertEquals(res, []);
@@ -76,14 +74,13 @@ Deno.test("trie sanity check", () => {
 	idx.removeDocId("2");
 	dump = idx.dump();
 	assertEquals(dump.words, { foo: ["1"], bar: ["3"] });
-
-	// console.log(JSON.stringify(idx, null, 4));
+	// assertEquals(dump.docIdToWords, { 1: ["foo"], 3: ["bar"] });
 });
 
-Deno.test("trie fuzzy search", () => {
+Deno.test("inverted fuzzy search", () => {
 	const docs = ["hello", "ehlo", "books", "look", "cook", "hello", "hell"];
 
-	const idx = new TrieIndex();
+	const idx = new InvertedIndex();
 	docs.forEach((word, id) => {
 		idx.addWord(word, `${id}`);
 	});
