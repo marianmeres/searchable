@@ -28,6 +28,7 @@ function replaceWithJs(_match: any, q1: any, path1: any, q3: any, q4: any, path2
 const srcDir = "./src";
 const outDir = "./.npm-dist";
 const outDirSrc = join(outDir, srcDir);
+const outDirDist = join(outDir, 'dist');
 
 await ensureDir(outDir);
 await emptyDir(outDir);
@@ -110,3 +111,6 @@ Deno.writeTextFileSync(
 });
 
 Deno.removeSync(outDirSrc, { recursive: true });
+
+// copy dist to example
+copySync(outDirDist, 'example/dist', { overwrite: true });
