@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { Searchable, type SearchableOptions } from "../src/searchable.ts";
 
 const docs: Record<string, string> = {
@@ -96,4 +96,22 @@ Deno.test("searchFuzzy with ngrams works", () => {
 		// console.log(res);
 		assertEquals(res, ["2", "10"]);
 	});
+});
+
+Deno.test("readme", () => {
+	const index = new Searchable({ ngramsSize: [3, 4] });
+	index.add("james bond", "007");
+
+	const results = index.searchByPrefix("Bond. James Bond.");
+	assert(results.length === 1);
+	assert(results[0] === "007");
+
+	// console.log(results);
+	// index.add(
+	// 	`Quantum of Solace (2008, Marc Forster) / Adventure, Action, Thriller, Crime
+	// 	Daniel Craig (James Bond), Olga Kurylenko (Camille Montes), Mathieu Amalric (Dominic Greene)`,
+	// 	"foo"
+	// );
+	// results = index.searchByPrefix("Bond. James Bond.");
+	// console.log(results);
 });

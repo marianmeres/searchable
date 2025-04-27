@@ -45,6 +45,21 @@
 					timeout = setTimeout(() => fn.apply(context, args), wait);
 				};
 			}
+
+			function getSelectedRadioValue(nameOrList) {
+				let selectedValue = "";
+				const radios =
+					typeof nameOrList === "string"
+						? qsa(`input[name="${nameOrList}"]`)
+						: nameOrList;
+				for (const radioButton of nameOrList) {
+					if (radioButton.checked) {
+						selectedValue = radioButton.value;
+						break;
+					}
+				}
+				return selectedValue;
+			}
 		</script>
 	</head>
 	<body>
@@ -71,9 +86,20 @@
 			</div>
 
 			<div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
+				Search:
 				<label>
-					<input type="checkbox" id="fuzzy" /> Use fuzzy search (allow
-					misspelled words)
+					<input type="radio" name="strategy" value="exact" />
+					exact
+				</label>
+
+				<label>
+					<input type="radio" name="strategy" value="prefix" checked />
+					by prefix
+				</label>
+
+				<label>
+					<input type="radio" name="strategy" value="fuzzy" />
+					fuzzy
 				</label>
 			</div>
 
@@ -100,6 +126,7 @@
 			import { createStore } from "./node_modules/@marianmeres/store/dist/index.js";
 			const qsa = window.qsa;
 			const debouce = window.debounce;
+			const getSelectedRadioValue = window.getSelectedRadioValue;
 			// import movies from "./movies.json" assert { type: "json" };
 
 			fetch("./movies.json")
@@ -111,7 +138,7 @@
 				});
 
 			const initialized = createStore(false);
-			const index = new Searchable({ ngramsSize: [3, 4] });
+			const index = new Searchable({ ngramsSize: 0 });
 			let docs = {};
 
 			function init(movies) {
@@ -122,6 +149,7 @@
 						// movie.tagline,
 						// movie.overview,
 						movie.year,
+						movie.characters.join(),
 						movie.genres.join(),
 						movie.actors.join(),
 						movie.directors.join(),
@@ -134,7 +162,7 @@
 
 			const $log = qsa("#console")[0];
 			const $input = qsa("#query")[0];
-			const $fuzzy = qsa("#fuzzy")[0];
+			const $strategyRadios = qsa('input[name="strategy"]');
 
 			initialized.subscribe((v) => {
 				// console.log("initialized", v);
@@ -146,18 +174,25 @@
 			});
 
 			const search = debounce((v) => {
-				// console.log("query", v);
+				const strategy = getSelectedRadioValue($strategyRadios);
 				const start = Date.now();
-				const docIds = $fuzzy.checked
-					? index.searchFuzzy(v)
-					: index.searchByPrefix(v);
+				let docIds = [];
+				if (strategy === "exact") {
+					docIds = index.searchExact(v);
+				} else if (strategy === "prefix") {
+					docIds = index.searchByPrefix(v);
+				} else {
+					docIds = index.searchFuzzy(v);
+				}
 				render(docIds, Date.now() - start);
 			}, 100);
 
 			$input.addEventListener("input", (e) => search(e.target.value));
-			$fuzzy.addEventListener("change", (e) => {
-				// console.log(e.target.checked);
-				search($input.value);
+
+			$strategyRadios.forEach((radio) => {
+				radio.addEventListener("change", () => {
+					search($input.value);
+				});
 			});
 
 			const render = (docIds, duration) => {
@@ -196,10 +231,10 @@
 					);
 				}
 
-				let dur = "";
-				if (duration) {
-					dur = `(Found ${results.length} matching out of ~2500 total records in ${duration} ms)<br/><br/>`;
-				}
+				// let dur = "";
+				// if (duration) {
+				let dur = `(Found ${results.length} matching out of ~2500 total records in ${duration} ms)<br/><br/>`;
+				// }
 
 				$log.innerHTML = dur + out.join("<br />");
 			};

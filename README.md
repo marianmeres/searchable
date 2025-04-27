@@ -11,6 +11,9 @@ Useful for fast in-memory filtering of ahead-of-time known set of documents
 With prefix and fuzzy search the results are ordered by their matched words 
 closeness to the query words (using Levenshtein distance and "best naive effort").
 
+Note that fuzzy search with short input query words and generated n-grams may produce
+not so usable results.
+
 ## Real world example
 See https://searchable.meres.sk/example/
 
@@ -28,7 +31,7 @@ const index = new Searchable(options);
 index.add('james bond', '007');
 
 // search for it
-let results = index.searchByPrefix('Bond. James Bond.');
+const results = index.searchByPrefix('Bond. James Bond.');
 // or searchExact
 // or searchFuzzy
 
