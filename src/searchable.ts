@@ -67,12 +67,12 @@ export class Searchable {
 	}
 
 	/** Access to internal index instance */
-	get __index() {
+	get __index(): InvertedIndex | TrieIndex {
 		return this.#index;
 	}
 
 	/** How many words (including ngrams!) are in the index in total */
-	get wordCount() {
+	get wordCount(): number {
 		return this.#index.wordCount;
 	}
 
@@ -86,7 +86,7 @@ export class Searchable {
 	}
 
 	/** Will split the input string into words respecting the `nonWordCharWhitelist` options. */
-	toWords(input: string) {
+	toWords(input: string): string[] {
 		// 1. normalize
 		input = normalize(input, this.#normalizeOptions);
 
@@ -121,11 +121,11 @@ export class Searchable {
 	}
 
 	/** Will add the searchable input string + docId pair to the index. */
-	add(input: string, docId: string) {
+	add(input: string, docId: string): number {
 		this.#assertWordAndDocId(input, docId);
 		//
 		const words = this.toWords(input);
-		if (!words.length) return false;
+		if (!words.length) return 0;
 
 		let added = 0;
 		for (const word of words) {
@@ -231,13 +231,13 @@ export class Searchable {
 	}
 
 	/** Will export the index internals as a string. */
-	dump(stringify = true) {
+	dump(stringify = true): string | Record<string, any> {
 		const dump = this.#index.dump();
 		return stringify ? JSON.stringify(dump) : dump;
 	}
 
 	/** Will reset and restore the internal index state from the provided dump. */
-	restore(dump: any) {
+	restore(dump: any): boolean {
 		return this.#index.restore(dump);
 	}
 }

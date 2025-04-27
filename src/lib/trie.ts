@@ -1,3 +1,5 @@
+// deno-lint-ignore-file no-explicit-any
+
 import { levenshteinDistance } from "./levenshtein.ts";
 
 /**
@@ -6,15 +8,15 @@ import { levenshteinDistance } from "./levenshtein.ts";
 class TrieNode {
 	constructor(
 		/** Map of character to TrieNode */
-		public children = new Map<string, TrieNode>(),
+		public children: Map<string, TrieNode> = new Map<string, TrieNode>(),
 		/** Flag if this char represens end of word */
-		public isEOW = false,
+		public isEOW: boolean = false,
 		/** Set of docIds associated with this word */
-		public docIds = new Set<string>()
+		public docIds: Set<string> = new Set<string>()
 	) {}
 
 	// for debug
-	toJSON() {
+	toJSON(): Record<string, any> {
 		return {
 			children: Object.fromEntries(this.children.entries()),
 			isEOW: this.isEOW,
@@ -34,7 +36,7 @@ export class TrieIndex {
 		this.root = new TrieNode();
 	}
 
-	toJSON() {
+	toJSON(): Record<string, any> {
 		return this.root.toJSON().children;
 	}
 
@@ -111,7 +113,7 @@ export class TrieIndex {
 	/**
 	 * Removes a word and associated docId from the index
 	 */
-	removeWord(word: string, docId: string) {
+	removeWord(word: string, docId: string): boolean {
 		this.#assertWordAndDocId(word, docId);
 
 		const result = this.#removeWordFromTrie(this.root, word, 0, docId);
@@ -227,7 +229,7 @@ export class TrieIndex {
 	/**
 	 * Search for all words associated with a docId.
 	 */
-	searchByDocId(docId: string) {
+	searchByDocId(docId: string): string[] {
 		const words = this.#docIdToWords.get(docId);
 		return words ? [...new Set(words)] : [];
 	}
@@ -371,7 +373,7 @@ export class TrieIndex {
 	 */
 	restore(
 		data: string | { version?: string; words: Record<string, string[]> }
-	) {
+	): boolean {
 		try {
 			if (typeof data === "string") {
 				data = JSON.parse(data) as {

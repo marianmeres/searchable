@@ -177,7 +177,7 @@ export class InvertedIndex {
 	/**
 	 * Search for all words associated with a docIds.
 	 */
-	searchByDocId(docId: string) {
+	searchByDocId(docId: string): string[] {
 		const words = this.#docIdToWords.get(docId);
 		return words ? [...new Set(words)] : [];
 	}
