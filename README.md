@@ -1,12 +1,15 @@
 # @marianmeres/searchable
 
-Configurable fast text search index with support of:
-- exact words match,
-- words prefix match,
-- words fuzzy match.
+Configurable fast text search index featuring:
+- (extremely fast) exact words search,
+- (pretty fast) words prefix search (word begins with),
+- (reasonably fast) words fuzzy search (misspelled, or parts of the word match).
 
 Useful for fast in-memory filtering of ahead-of-time known set of documents
 (autosuggestions, typeahead or similar).
+
+With prefix and fuzzy search the results are ordered by their matched words 
+closeness to the query words (using Levenshtein distance and "best naive effort").
 
 ## Real world example
 See https://searchable.meres.sk/example/
@@ -21,7 +24,7 @@ npm install @marianmeres/searchable
 // create instance
 const index = new Searchable(options);
 
-// add any a searchable string with document ID
+// add a searchable string with its document ID reference
 index.add('james bond', '007');
 
 // search for it
@@ -40,25 +43,24 @@ assert(results[0] === '007');
 
 // default options
 const index = new Searchable({
-    // self explanatory
+    // Self explanatory
     caseSensitive: false,
 
-    // self explanatory
+    // Self explanatory
     accentSensitive: false,
 
-    // function to check whether the word should be considered as a stopword (and so
-    // effectively omitted from index and/or query)
+    // Function to check whether the word should be considered as a stopword (and so
+    // effectively omitted from index and/or query).
     isStopword: (word): boolean => false,
 
-    // any custom normalization applied before adding to index or used for query
-    // useful for e.g.: stemming, spellcheck, custom conversion...
-    // can return array of words (e.g. aliases)
+    // Any custom normalization applied before adding to index or used for query
+    // useful for e.g.: stemming, custom conversion... Can return array of words (e.g. aliases).
     normalizeWord: (word): string | string[] => word,
 
-    // will skip search altogether if none of the query words is longer than this limit
+    // Will skip search altogether if none of the query words is longer than this limit.
     querySomeWordMinLength: 1,
 
-    // which underlying implementation to use... If you are not sure, use "inverted" (the default)
+    // Which underlying implementation to use. If you are not sure, use "inverted" (the default).
     // @see bench/bench.ts for more
     index: "inverted" | "trie",
 
@@ -66,8 +68,11 @@ const index = new Searchable({
     // your own non-word whitelist of chars which should be considered as a part of the word.
     nonWordCharWhitelist: "@-",
 
-    // how big (if any) ngrams to use. Used for typos. Use 0 to disable.
+    // How big (if any) ngrams to generate. Use 0 to not generate ngrams (the default).
+    // Reasonable value would be [3, 4]. Smaller values will increase the memory
+    // footprint and not provide any practical benefit.
     ngramsSize: 0, // or array of values
 });
 
 ```
+
