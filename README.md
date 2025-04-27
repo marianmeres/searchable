@@ -18,12 +18,18 @@ not so usable results.
 See https://searchable.meres.sk/example/
 
 ## Installation
-```shell
+```sh
+deno add jsr:@marianmeres/searchable
+```
+```sh
 npm install @marianmeres/searchable
 ```
 
 ## Basic usage
-```javascript
+```js
+import { Searchable } from '@marianmeres/searchable';
+```
+```js
 // create instance
 const index = new Searchable(options);
 
