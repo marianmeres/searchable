@@ -1,141 +1,99 @@
-import path from 'node:path';
-import { strict as assert } from 'assert';
-import { TestRunner } from '@marianmeres/test-runner';
-import { fileURLToPath } from 'node:url';
-import { Searchable } from '../src/index.js';
+import { assertEquals } from "@std/assert";
+import { Searchable, type SearchableOptions } from "../src/searchable.ts";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const docs: Record<string, string> = {
+	1: "How does he repair a leaking new kitchen faucet",
+	2: "Best restaurants with kitchen service in downtown Seattle",
+	3: "iPhone 14 Pro Max battery replacement cost",
+	4: "Symptoms of seasonal allergies vs common cold",
+	5: "Quick chocolate chip cookie recipe without eggs",
+	6: "Used Toyota Camry 2018-2020 reliability review",
+	7: "Home office tax deduction requirements for 2025",
+	8: "Natural remedies for seasonal headaches",
+	9: "Flight status BA287 London to New York",
+	10: "Beginner's guide to growing vegetables in your home office garden",
+	11: "Hey ho let's go",
+};
 
-const suite = new TestRunner(path.basename(__filename));
-
-suite.test('basic usage', () => {
-	const index = new Searchable();
-
-	const license = { to: 'kill' };
-	index.add('james bond', license);
-	index.add('007', license);
-
-	let results = index.search('bond james bond');
-	assert(results.length === 1);
-	assert(results[0] === license);
-
-	results = index.search('007 bond');
-	assert(results.length === 1);
-	assert(results[0] === license);
-});
-
-suite.test('all words must find some', () => {
-	const index = new Searchable();
-	index.add('foo bar', 1);
-	index.add('bar baz', 2);
-	index.add('baz bat', 3);
-
-	assert(!index.search('bar asdf').length);
-});
-
-suite.test('store only ids in the index example', () => {
-	const map = { 1: 'peter pan', 2: 'mickey mouse', 3: 'shrek' };
-	const index = new Searchable();
-
-	// add only ids to index
-	Object.entries(map).forEach(([id, label]) => index.add(label, id));
-
-	// map results back to values
-	assert('shrek' === index.search('shr').map((id) => map[id])[0]);
-});
-
-suite.test('accent sensitivity example', () => {
-	const accented = 'Příliš žluťoučký kůň úpěl ďábelské ódy';
-
-	// accent insensitive (default)
-	let index = new Searchable();
-	index.add(accented, true);
-	assert(index.search('kůň')[0]);
-	assert(index.search('kun')[0]);
-
-	// accent sensitive
-	index = new Searchable({ accentSensitive: true });
-	index.add(accented, true);
-	assert(index.search('kůň')[0]);
-	assert(!index.search('kun')[0]);
-});
-
-suite.test('case sensitivity example', () => {
-	// case insensitive (default)
-	let index = new Searchable();
-	index.add('FoO', true);
-	assert(index.search('FOO')[0]);
-	assert(index.search('fOo')[0]);
-
-	// case sensitive
-	index = new Searchable({ caseSensitive: true });
-	index.add('FoO', true);
-	assert(!index.search('FOO')[0]);
-	assert(!index.search('fOo')[0]);
-	assert(index.search('FoO')[0]);
-});
-
-suite.test('normalize example', () => {
-	const index = new Searchable({
-		normalizeWord: (w) => {
-			const sports = { basketball: 'sport', football: ['sport', 'soccer'] };
-			return sports[w.toLowerCase()] || w;
-		},
+const createSearchable = (opts: Partial<SearchableOptions> = {}) => {
+	const idx = new Searchable(opts);
+	Object.entries(docs).forEach(([docId, searchable]) => {
+		idx.add(searchable, docId);
 	});
+	return idx;
+};
 
-	index.add('basketball', 'basketball');
-	index.add('football', 'football');
+Deno.test("searchExact works", () => {
+	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
+		const idx = createSearchable({ index });
 
-	assert(index.search('sport').length === 2); // ['basketball', 'football']
+		let res = idx.searchExact("office home");
+		// console.log(res);
+		assertEquals(res, ["7", "10"]);
 
-	assert(index.search('soccer').length === 1);
-	assert(index.search('soccer')[0] === 'football');
-});
+		res = idx.searchExact("2018");
+		assertEquals(res, []);
 
-suite.test('processResults and querySomeWordMinLength example', () => {
-	const index = new Searchable({
-		processResults: (results, parseQueryResults) => {
-			return results.map((v) => {
-				if (v.foo) v.foo = v.foo.toUpperCase();
-				return v;
-			});
-		},
-		querySomeWordMinLength: 3,
+		// because "-" is whitelisted as part of the word
+		res = idx.searchExact("2018-2020");
+		assertEquals(res, ["6"]);
 	});
-
-	const value = { foo: 'bar' };
-	index.add(' fOo Bar \n ', value);
-	index.add('foo', { foo: 'foo' });
-	index.add('bar', { bar: 'bar' });
-
-	// query too short
-	assert(!index.search('fo').length);
-
-	//
-	const found = index.search(' ba FOO');
-	assert(found.length === 1);
-	assert(found[0] === value);
-	// uppercase BAR because of processResults
-	assert(found[0].foo === 'BAR');
 });
 
-suite.test('index is serializable', () => {
-	const index = new Searchable();
-	index.add('james bond', 7);
-	const dump = index.dump();
-	assert(typeof dump === 'string');
+Deno.test("searchByPrefix works", () => {
+	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
+		const idx = createSearchable({ index });
 
-	const index2 = new Searchable();
-	index2.restore(dump);
-	assert(7 === index2.search('bond')[0]);
+		let res = idx.searchByPrefix("he");
+		assertEquals(res, ["1", "11", "8"]);
 
-	// this unserializable example does NOT work for dump & restore:
-	index.add('foo', { foo: Symbol() });
-	const index3 = new Searchable();
-	index3.restore(index.dump());
-	// we get `{}` instead of `{ foo: ... }`, so:
-	assert(undefined === index3.search('foo')[0].foo);
+		res = idx.searchByPrefix("2018");
+		assertEquals(res, ["6"]);
+
+		// because "-" is whitelisted as part of the word
+		res = idx.searchByPrefix("2018-2020");
+		// console.log(res);
+		assertEquals(res, ["6"]);
+	});
 });
 
-export default suite;
+Deno.test("searchFuzzy works", () => {
+	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
+		const idx = createSearchable({ index });
+
+		let res = idx.searchFuzzy("Ófíce hme");
+		assertEquals(res, ["7", "10"]);
+
+		res = idx.searchFuzzy("2018");
+		// note that we're NOT getting 6 because "2025" is closer to "2018"
+		// than to "2018-2020"
+		assertEquals(res, ["7"]);
+
+		res = idx.searchFuzzy("kichtén");
+		// console.log(res);
+		assertEquals(res, ["1", "2"]);
+	});
+});
+
+Deno.test("searchByPrefix with ngrams works", () => {
+	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
+		const idx = createSearchable({ index, ngramsSize: [3, 4, 5] });
+
+		let res = idx.searchByPrefix("nal");
+		assertEquals(res, ["4", "8"]);
+
+		res = idx.searchByPrefix("table");
+		assertEquals(res, ["10"]);
+	});
+});
+
+Deno.test("searchFuzzy with ngrams works", () => {
+	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
+		const idx = createSearchable({ index, ngramsSize: [3] });
+
+		// hm... this is way too tolerant
+		const res = idx.searchFuzzy("table");
+		// console.log(res);
+		assertEquals(res, ["2", "10"]);
+	});
+});
