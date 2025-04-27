@@ -158,6 +158,10 @@ export class Searchable {
     searchByPrefix(query) {
         return this.#search((word) => this.#index.searchByPrefix(word, true), query);
     }
+    /** Alias for `searchByPrefix` for a v1 backwards compatible api. */
+    search(query) {
+        return this.searchByPrefix(query);
+    }
     /**
      * Main API. Will search the index in a fuzzy fashion, respecting lev distance and
      * n-grams size in options. Note that high distance with multiple sized n-grams may

@@ -39,6 +39,8 @@ export declare class Searchable {
     searchExact(query: string): string[];
     /** Main API. Will search the index for prefix matched (begins with) words from the query. */
     searchByPrefix(query: string): string[];
+    /** Alias for `searchByPrefix` for a v1 backwards compatible api. */
+    search(query: string): string[];
     /**
      * Main API. Will search the index in a fuzzy fashion, respecting lev distance and
      * n-grams size in options. Note that high distance with multiple sized n-grams may
