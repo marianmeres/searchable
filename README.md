@@ -1,18 +1,31 @@
 # @marianmeres/searchable
 
-Configurable fast text search index featuring:
-- (extremely fast) exact words search,
-- (pretty fast) words prefix search (word begins with),
-- (reasonably fast) words fuzzy search (misspelled, or parts of the word match).
+Customizable fast text search index featuring:
+- Extremely fast "exact" word matching
+- Super fast word "prefix" searching (catches the beginning of words)
+- Reasonably fast "fuzzy" searching (handles typos and partial matches)
 
-Useful for fast in-memory filtering of ahead-of-time known set of documents
-(autosuggestions, typeahead or similar).
+Great for quickly filtering through documents you already have in memory 
+(like for autocomplete suggestions or typeahead features).
 
-With prefix and fuzzy search the results are ordered by their matched words 
-closeness to the query words (using Levenshtein distance and "best naive effort").
+When you use prefix or fuzzy search, results get ranked by how close they match your 
+search terms (using Levenshtein distance).
 
-Note that fuzzy search with short input query words and generated n-grams may produce
-not so usable results.
+Heads-up: fuzzy search might give you weird results with short query words 
+(especially with n-grams enabled).
+
+## Choosing the right search strategy: Exact, Prefix, or Fuzzy?
+
+Your optimal search strategy depends on several factors:
+
+- Document volume (smaller collections often benefit from exact matching)
+- Document characteristics (technical terminology vs. conversational language)
+- Query length (shorter terms typically require more precision)
+- Use case sensitivity (financial identifiers vs. content descriptions)
+- Search interaction model (real-time typeahead vs. deliberate search submissions)
+
+The decision is rarely straightforward. Consider implementing a hybrid approach that 
+combines multiple strategies for optimal results.
 
 ## Real world example
 See https://searchable.meres.sk/example/
