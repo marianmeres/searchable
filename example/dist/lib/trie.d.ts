@@ -4,14 +4,14 @@
 declare class TrieNode {
     /** Map of character to TrieNode */
     children: Map<string, TrieNode>;
-    /** Flag if this char represens end of word */
+    /** Flag if this char represents end of word */
     isEOW: boolean;
     /** Set of docIds associated with this word */
     docIds: Set<string>;
     constructor(
     /** Map of character to TrieNode */
     children?: Map<string, TrieNode>, 
-    /** Flag if this char represens end of word */
+    /** Flag if this char represents end of word */
     isEOW?: boolean, 
     /** Set of docIds associated with this word */
     docIds?: Set<string>);

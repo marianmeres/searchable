@@ -5,7 +5,7 @@ import { normalize } from "./lib/normalize.js";
 import { tokenize } from "./lib/tokenize.js";
 /**
  * High level search API and manager of the internal search flow (input normalization,
- * tokenizing, options handling...).
+ * tokenizing, options handling...)
  */
 export class Searchable {
     #options = {
@@ -89,7 +89,7 @@ export class Searchable {
         let added = 0;
         for (const word of words) {
             added += Number(this.#index.addWord(word, docId));
-            // should we use ngrams?
+            // should we use n-grams?
             if (this.#options.ngramsSize) {
                 const ngramsSizes = Array.isArray(this.#options.ngramsSize)
                     ? this.#options.ngramsSize
@@ -130,9 +130,9 @@ export class Searchable {
             // so we need to save the distances so we can sort the intersection later
             else {
                 // hm... this is all good and working fine, the only thing is, that
-                // with ngrams, it stops making sense. Ideally the ngram match should
-                // be excluded from the distance calc... hm, but currently we can't
-                // distinguish between regular word match or ngram match
+                // with n-grams, it stops making sense. Ideally the n-gram match should
+                // be excluded from the distance calc... but currently we can't
+                // distinguish between regular word match or n-gram match
                 const docIds = [];
                 Object.entries(idDistMapOrArray).forEach(([id, distance]) => {
                     if (idToDistance.has(id)) {
@@ -160,7 +160,7 @@ export class Searchable {
     }
     /**
      * Main API. Will search the index in a fuzzy fashion, respecting lev distance and
-     * ngrams size in options. Note that high distance with multiple sized ngrams may
+     * n-grams size in options. Note that high distance with multiple sized n-grams may
      * produce practically unusable and unexpected search result (too many matches).
      */
     searchFuzzy(query, maxDistance = 2) {

@@ -10,7 +10,7 @@ class TrieNode {
     constructor(
     /** Map of character to TrieNode */
     children = new Map(), 
-    /** Flag if this char represens end of word */
+    /** Flag if this char represents end of word */
     isEOW = false, 
     /** Set of docIds associated with this word */
     docIds = new Set()) {

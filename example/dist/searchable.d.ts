@@ -22,7 +22,7 @@ export interface SearchableOptions {
 }
 /**
  * High level search API and manager of the internal search flow (input normalization,
- * tokenizing, options handling...).
+ * tokenizing, options handling...)
  */
 export declare class Searchable {
     #private;
@@ -41,7 +41,7 @@ export declare class Searchable {
     searchByPrefix(query: string): string[];
     /**
      * Main API. Will search the index in a fuzzy fashion, respecting lev distance and
-     * ngrams size in options. Note that high distance with multiple sized ngrams may
+     * n-grams size in options. Note that high distance with multiple sized n-grams may
      * produce practically unusable and unexpected search result (too many matches).
      */
     searchFuzzy(query: string, maxDistance?: number): string[];
