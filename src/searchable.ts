@@ -120,7 +120,7 @@ export class Searchable {
 		return Array.from(new Set(words));
 	}
 
-	/** Will the searchable input string + docId pair to the index. */
+	/** Will add the searchable input string + docId pair to the index. */
 	add(input: string, docId: string) {
 		this.#assertWordAndDocId(input, docId);
 		//

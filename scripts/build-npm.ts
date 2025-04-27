@@ -109,4 +109,4 @@ Deno.writeTextFileSync(
 	Deno.removeSync(join(outDir, f))
 });
 
-Deno.removeSync(outDirSrc);
+Deno.removeSync(outDirSrc, { recursive: true });
