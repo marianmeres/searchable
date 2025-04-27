@@ -218,6 +218,11 @@ export class Searchable {
 		);
 	}
 
+	/** Alias for `searchByPrefix` for a v1 backwards compatible api. */
+	search(query: string): string[] {
+		return this.searchByPrefix(query);
+	}
+
 	/**
 	 * Main API. Will search the index in a fuzzy fashion, respecting lev distance and
 	 * n-grams size in options. Note that high distance with multiple sized n-grams may

@@ -90,7 +90,7 @@ const index = new Searchable({
     // your own non-word whitelist of chars which should be considered as a part of the word.
     nonWordCharWhitelist: "@-",
 
-    // How big (if any) ngrams to generate. Use 0 to not generate ngrams (the default).
+    // How big (if any) n-grams to generate. Use 0 to not generate n-grams (the default).
     // Reasonable value would be [3, 4]. Smaller values will increase the memory
     // footprint and not provide any practical benefit.
     ngramsSize: 0, // or array of values

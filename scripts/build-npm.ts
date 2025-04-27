@@ -30,12 +30,8 @@ const outDirDist = join(outDir, 'dist');
 await ensureDir(outDir);
 await emptyDir(outDir);
 
-copySync(srcDir, outDirSrc);
-
-// Deno.copyFileSync(join(srcDir, "mod.ts"), join(outDir, "index.ts"));
-// Deno.renameSync(join(outDirSrc, "mod.ts"), join(outDirSrc, "index.ts"));
-
 // copy
+copySync(srcDir, outDirSrc);
 Deno.copyFileSync("LICENSE", join(outDir, "LICENSE"));
 Deno.copyFileSync("README.md", join(outDir, "README.md"));
 
@@ -49,9 +45,6 @@ const tsconfigJson = {
 		forceConsistentCasingInFileNames: true,
 		skipLibCheck: true,
 		rootDir: "src",
-		// allowImportingTsExtensions: true,
-		// emitDeclarationOnly: true,
-		// noEmit: true,
 		outDir: "dist",
 	},
 };
@@ -60,8 +53,7 @@ Deno.writeTextFileSync(
 	JSON.stringify(tsconfigJson, null, "\t")
 );
 
-// WTF: Option 'allowImportingTsExtensions' can only be used when...
-// console.log(Array.from(walkSync(outDirSrc)));
+// WTF hackery: Option 'allowImportingTsExtensions' can only be used when...
 for (const f of walkSync(outDirSrc)) {
 	if (f.isFile) {
 		const contents = Deno.readTextFileSync(f.path);
@@ -69,7 +61,6 @@ for (const f of walkSync(outDirSrc)) {
 		Deno.writeTextFileSync(f.path, replaced);
 	}
 }
-// throw new Error('hoho')
 
 // compile tsc
 const command = new Deno.Command("tsc", {
