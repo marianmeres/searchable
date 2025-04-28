@@ -66,9 +66,11 @@ const index = new Searchable(options);
 index.add('james bond', '007');
 
 // search for it
-const results = index.searchByPrefix('Bond. James Bond.');
-// or searchExact
-// or searchFuzzy
+const results = index.search(
+    'Bond. James Bond.', 
+    // you can provide a desired strategy ("prefix" by default)
+    strategy: 'exact' | 'prefix' | 'fuzzy' = 'prefix'
+);
 
 assert(results.length === 1);
 assert(results[0] === '007');
