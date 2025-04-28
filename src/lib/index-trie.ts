@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 
+import { Index } from "./index-abstract.ts";
 import { levenshteinDistance } from "./levenshtein.ts";
 
 /**
@@ -23,21 +24,35 @@ class TrieNode {
 			docIds: [...this.docIds],
 		};
 	}
+
+	/** Debug helper */
+	__toCharTrie(
+		_tree: Record<string, any> = {},
+		_node?: TrieNode
+	): Record<string, any> {
+		_node ??= this;
+		_node?.children?.entries().forEach(([char, node]) => {
+			_tree[char] ??= {};
+			this.__toCharTrie(_tree[char], node);
+		});
+		return _tree;
+	}
 }
 
 /** Inverted index manager */
-export class TrieIndex {
-	root: TrieNode;
+export class TrieIndex extends Index {
+	#root: TrieNode;
 
 	// helper index for fast lookup by docId
 	#docIdToWords: Map<string, Set<string>> = new Map();
 
 	constructor() {
-		this.root = new TrieNode();
+		super();
+		this.#root = new TrieNode();
 	}
 
 	toJSON(): Record<string, any> {
-		return this.root.toJSON().children;
+		return this.#root.toJSON().children;
 	}
 
 	/** Get the total number of unique words in the index. */
@@ -89,7 +104,7 @@ export class TrieIndex {
 		this.#assertWordAndDocId(word, docId);
 
 		// Add word to the trie
-		let currentNode = this.root;
+		let currentNode = this.#root;
 		for (const char of word) {
 			if (!currentNode.children.has(char)) {
 				currentNode.children.set(char, new TrieNode());
@@ -116,7 +131,7 @@ export class TrieIndex {
 	removeWord(word: string, docId: string): boolean {
 		this.#assertWordAndDocId(word, docId);
 
-		const result = this.#removeWordFromTrie(this.root, word, 0, docId);
+		const result = this.#removeWordFromTrie(this.#root, word, 0, docId);
 
 		// Update document-word mapping
 		if (result && this.#docIdToWords.has(docId)) {
@@ -142,7 +157,7 @@ export class TrieIndex {
 		let removedCount = 0;
 
 		for (const word of words) {
-			if (this.#removeWordFromTrie(this.root, word, 0, docId)) {
+			if (this.#removeWordFromTrie(this.#root, word, 0, docId)) {
 				removedCount++;
 			}
 		}
@@ -158,7 +173,7 @@ export class TrieIndex {
 		// const result = this.#wordToDocIds.get(word);
 		// return result ? [...new Set(result)] : [];
 
-		let currentNode = this.root;
+		let currentNode = this.#root;
 		for (const char of word) {
 			if (!currentNode.children.has(char)) {
 				return []; // Word not found
@@ -185,7 +200,7 @@ export class TrieIndex {
 		prefix: string,
 		returnWithDistance: boolean = false
 	): string[] | Record<string, number> {
-		let currentNode = this.root;
+		let currentNode = this.#root;
 		const resultsMap = new Map<string, Set<string>>();
 		const results = new Set<string>();
 		const idToDistance = new Map<string, number>();
@@ -343,7 +358,7 @@ export class TrieIndex {
 	 */
 	#collectAllWords(): Map<string, Set<string>> {
 		const results = new Map<string, Set<string>>();
-		this.#collectWords(this.root, "", results);
+		this.#collectWords(this.#root, "", results);
 		return results;
 	}
 
@@ -387,7 +402,7 @@ export class TrieIndex {
 			}
 
 			// Clear existing data
-			this.root = new TrieNode();
+			this.#root = new TrieNode();
 			this.#docIdToWords.clear();
 
 			// Restore wordToDocIds (word -> Set of docIds)
@@ -402,5 +417,12 @@ export class TrieIndex {
 			console.error("Error restoring index", e);
 			throw new Error("Error restoring index");
 		}
+	}
+
+	/** Debug helper */
+	__toCharTrie(): Record<string, any> {
+		const tree = {};
+		this.#root.__toCharTrie(tree);
+		return tree;
 	}
 }

@@ -11,8 +11,18 @@ Great for quickly filtering through documents you already have in memory
 When you use prefix or fuzzy search, results get ranked by how close they match your 
 search terms (using Levenshtein distance).
 
-Heads-up: fuzzy search might give you weird results with short query words 
-(especially with n-grams enabled).
+## Extremely, Super, Reasonably... How fast is it really?
+
+Here's the [bench script](bench/bench.ts), tested on a movie database with approx ~2500 
+records, with tens of thousands of words in total. The same data are used in 
+the [real world example](https://searchable.meres.sk/example/) where you can test it by yourself.
+
+Long story short (tested on M2 chip): 
+- the exact search executes often under 1 millisecond (!),
+- the prefix search executes within few milliseconds,
+- and the fuzzy executes within few tens of milliseconds.
+
+That's fast enough.
 
 ## Choosing the right search strategy: Exact, Prefix, or Fuzzy?
 
@@ -25,7 +35,13 @@ Your optimal search strategy depends on several factors:
 - Search interaction model (real-time typeahead vs. deliberate search submissions)
 
 The decision is rarely straightforward. Consider implementing a hybrid approach that 
-combines multiple strategies for optimal results.
+combines multiple strategies for optimal results. Be careful with the fuzzy search approach.
+
+## Know your Fuzzy
+
+Be aware that the fuzzy search might give you unexpected results. 
+Effecting factors are **query words count**, **query words length** and their 
+**similarity** to potential matches.
 
 ## Real world example
 See https://searchable.meres.sk/example/

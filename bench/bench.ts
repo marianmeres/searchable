@@ -104,7 +104,7 @@ Deno.bench({
 });
 
 /*
-$ deno bench src/_bench/bench.ts
+$ deno bench bench/bench.ts
     CPU | Apple M2
 Runtime | Deno 2.2.6 (aarch64-apple-darwin)
 

@@ -218,11 +218,6 @@ export class Searchable {
 		);
 	}
 
-	/** Alias for `searchByPrefix` for a v1 backwards compatible api. */
-	search(query: string): string[] {
-		return this.searchByPrefix(query);
-	}
-
 	/**
 	 * Main API. Will search the index in a fuzzy fashion, respecting lev distance and
 	 * n-grams size in options. Note that high distance with multiple sized n-grams may
@@ -233,6 +228,24 @@ export class Searchable {
 			(word: string) => this.#index.searchFuzzy(word, maxDistance, true),
 			query
 		);
+	}
+
+	/** Central main API entry. */
+	search(
+		query: string,
+		strategy: "exact" | "prefix" | "fuzzy" = "prefix",
+		options: Partial<{ maxDistance: number }> = {}
+	): string[] {
+		if (strategy === "exact") {
+			return this.searchExact(query);
+		}
+		if (strategy === "prefix") {
+			return this.searchByPrefix(query);
+		}
+		if (strategy === "fuzzy") {
+			return this.searchFuzzy(query, options?.maxDistance ?? 2);
+		}
+		throw new TypeError(`Unknown search strategy "${strategy}"`);
 	}
 
 	/** Will export the index internals as a string. */

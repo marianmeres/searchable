@@ -1,7 +1,8 @@
+import { Index } from "./index-abstract.ts";
 import { levenshteinDistance } from "./levenshtein.ts";
 
 /** Inverted index manager */
-export class InvertedIndex {
+export class InvertedIndex extends Index {
 	// Main index: word -> Set of docIds
 	#wordToDocIds: Map<string, Set<string>> = new Map();
 

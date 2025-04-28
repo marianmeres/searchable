@@ -39,14 +39,16 @@ export declare class Searchable {
     searchExact(query: string): string[];
     /** Main API. Will search the index for prefix matched (begins with) words from the query. */
     searchByPrefix(query: string): string[];
-    /** Alias for `searchByPrefix` for a v1 backwards compatible api. */
-    search(query: string): string[];
     /**
      * Main API. Will search the index in a fuzzy fashion, respecting lev distance and
      * n-grams size in options. Note that high distance with multiple sized n-grams may
      * produce practically unusable and unexpected search result (too many matches).
      */
     searchFuzzy(query: string, maxDistance?: number): string[];
+    /** Central main API entry. */
+    search(query: string, strategy?: "exact" | "prefix" | "fuzzy", options?: Partial<{
+        maxDistance: number;
+    }>): string[];
     /** Will export the index internals as a string. */
     dump(stringify?: boolean): string | Record<string, any>;
     /** Will reset and restore the internal index state from the provided dump. */

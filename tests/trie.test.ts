@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 
 import { assertEquals } from "@std/assert";
-import { TrieIndex } from "../src/lib/trie.ts";
+import { TrieIndex } from "../src/lib/index-trie.ts";
 
 Deno.test("trie sanity check", () => {
 	const idx = new TrieIndex();
@@ -103,4 +103,27 @@ Deno.test("trie fuzzy search", () => {
 
 	res = idx.searchFuzzy("hello", 1);
 	assertEquals(res, ["0", "5", "6"]);
+});
+
+Deno.test("char trie", () => {
+	const idx = new TrieIndex();
+	idx.addWord("foo", "1");
+	idx.addWord("bar", "2");
+	idx.addWord("baz", "3");
+
+	const expected = {
+		f: {
+			o: {
+				o: {},
+			},
+		},
+		b: {
+			a: {
+				r: {},
+				z: {},
+			},
+		},
+	};
+
+	assertEquals(idx.__toCharTrie(), expected);
 });

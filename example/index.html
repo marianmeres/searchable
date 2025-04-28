@@ -100,6 +100,7 @@
 				<label>
 					<input type="radio" name="strategy" value="fuzzy" />
 					fuzzy
+					<small class="text-muted"> (max Levenshtein dist. 2) </small>
 				</label>
 			</div>
 
@@ -176,14 +177,7 @@
 			const search = debounce((v) => {
 				const strategy = getSelectedRadioValue($strategyRadios);
 				const start = Date.now();
-				let docIds = [];
-				if (strategy === "exact") {
-					docIds = index.searchExact(v);
-				} else if (strategy === "prefix") {
-					docIds = index.searchByPrefix(v);
-				} else {
-					docIds = index.searchFuzzy(v);
-				}
+				const docIds = index.search(v, strategy);
 				render(docIds, Date.now() - start);
 			}, 100);
 

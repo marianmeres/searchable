@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 
 import { assertEquals } from "@std/assert";
-import { InvertedIndex } from "../src/lib/inverted.ts";
+import { InvertedIndex } from "../src/lib/index-inverted.ts";
 
 Deno.test("inverted index works", () => {
 	const idx = new InvertedIndex();
