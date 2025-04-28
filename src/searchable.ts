@@ -86,7 +86,7 @@ export class Searchable {
 	}
 
 	/** Will split the input string into words respecting the `nonWordCharWhitelist` options. */
-	toWords(input: string): string[] {
+	toWords(input: string, isQuery: boolean = false): string[] {
 		// 1. normalize
 		input = normalize(input, this.#normalizeOptions);
 
@@ -96,25 +96,28 @@ export class Searchable {
 		// first round stopwords filter
 		words = words.filter((w) => w && !this.#options.isStopword(w));
 
-		// normalizeWord can return array of new words
-		words = words.reduce((m, word) => {
-			const w = this.#options.normalizeWord(word);
-			if (w && Array.isArray(w)) {
-				m = [...m, ...w];
-			} else if (w) {
-				m.push(w as any);
-			}
-			return m;
-		}, [] as string[]);
+		// when adding to index, apply few more steps...
+		if (!isQuery) {
+			// normalizeWord can return array of new words
+			words = words.reduce((m, word) => {
+				const w = this.#options.normalizeWord(word);
+				if (w && Array.isArray(w)) {
+					m = [...m, ...w];
+				} else if (w) {
+					m.push(w as any);
+				}
+				return m;
+			}, [] as string[]);
 
-		// finalize... since normalizeWordabove may have changed words, must normalize again
-		words = words
-			.map((w) => {
-				w = normalize(w, this.#normalizeOptions);
-				if (w && this.#options.isStopword(w)) w = "";
-				return w;
-			})
-			.filter(Boolean);
+			// finalize... since normalizeWordabove may have changed words, must normalize again
+			words = words
+				.map((w) => {
+					w = normalize(w, this.#normalizeOptions);
+					if (w && this.#options.isStopword(w)) w = "";
+					return w;
+				})
+				.filter(Boolean);
+		}
 
 		// unique
 		return Array.from(new Set(words));
@@ -124,7 +127,7 @@ export class Searchable {
 	add(input: string, docId: string): number {
 		this.#assertWordAndDocId(input, docId);
 		//
-		const words = this.toWords(input);
+		const words = this.toWords(input, false);
 		if (!words.length) return 0;
 
 		let added = 0;
@@ -159,7 +162,7 @@ export class Searchable {
 	) {
 		const { querySomeWordMinLength } = this.#options;
 		query = normalize(query, this.#normalizeOptions);
-		const words = this.toWords(query);
+		const words = this.toWords(query, true);
 
 		if (!words.some((w) => w.length >= querySomeWordMinLength)) {
 			return [];

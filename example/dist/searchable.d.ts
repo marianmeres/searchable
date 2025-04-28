@@ -32,7 +32,7 @@ export declare class Searchable {
     /** How many words (including ngrams!) are in the index in total */
     get wordCount(): number;
     /** Will split the input string into words respecting the `nonWordCharWhitelist` options. */
-    toWords(input: string): string[];
+    toWords(input: string, isQuery?: boolean): string[];
     /** Will add the searchable input string + docId pair to the index. */
     add(input: string, docId: string): number;
     /** Main API. Will search the index for exact matched words from the query. */

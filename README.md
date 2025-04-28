@@ -83,17 +83,17 @@ assert(results[0] === '007');
 
 // default options
 const index = new Searchable({
-    // Self explanatory
+    // Should "Foo" and "foo" be considered as distinct words? (default false)
     caseSensitive: false,
 
-    // Self explanatory
+    // Should "cafe" and "café" be considered as distinct words? (default false)
     accentSensitive: false,
 
     // Function to check whether the word should be considered as a stopword (and so
     // effectively omitted from index and/or query).
     isStopword: (word): boolean => false,
 
-    // Any custom normalization applied before adding to index or used for query
+    // Any custom normalization applied before adding to index
     // useful for e.g.: stemming, custom conversion... Can return array of words (aliases).
     normalizeWord: (word): string | string[] => word,
 
