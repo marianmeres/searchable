@@ -18,7 +18,7 @@ records, with tens of thousands of words in total. The same data are used in
 the [real world example](https://searchable.meres.sk/example/) where you can test it by yourself.
 
 Long story short (tested on M2 chip): 
-- the exact search executes often under 1 millisecond (!),
+- the exact search executes often under 1 millisecond,
 - the prefix search executes within few milliseconds,
 - and the fuzzy executes within few tens of milliseconds.
 

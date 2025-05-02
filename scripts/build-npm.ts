@@ -87,6 +87,7 @@ const packageJson = {
 	bugs: {
 		url: "https://github.com/marianmeres/searchable/issues",
 	},
+	// dependencies: denoJson.d
 };
 Deno.writeTextFileSync(
 	join(outDir, "package.json"),

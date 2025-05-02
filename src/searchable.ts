@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 
+import type { Index } from "./lib/index-abstract.ts";
 import { intersect } from "./lib/intersect.ts";
 import { createNgrams, InvertedIndex, TrieIndex } from "./lib/mod.ts";
 import { normalize } from "./lib/normalize.ts";
@@ -26,10 +27,15 @@ export interface SearchableOptions {
 	 * And thus will not be used as a word boundary for the word tokenizer.
 	 * Default "@-", that means "at" and "-" are considered as part of the word.*/
 	nonWordCharWhitelist: string;
-	/** What ngrams size(s) to use? Set 0 (or empty array) to NOT use ngrams. Default is 0 */
+	/** What n-grams size(s) to use? Set 0 (or empty array) to NOT use n-grams. Default is 0 */
 	ngramsSize: 0 | 3 | 4 | 5 | (3 | 4 | 5)[];
 	/**  */
 	querySomeWordMinLength: number;
+	/** Default options used in `search` if none provided. */
+	defaultSearchOptions: Partial<{
+		strategy: "exact" | "prefix" | "fuzzy";
+		maxDistance: number;
+	}>;
 }
 
 /**
@@ -46,9 +52,13 @@ export class Searchable {
 		nonWordCharWhitelist: "@-",
 		ngramsSize: 0,
 		querySomeWordMinLength: 1,
+		defaultSearchOptions: {
+			strategy: "prefix",
+			maxDistance: 2,
+		},
 	};
 
-	#index: TrieIndex | InvertedIndex;
+	#index: Index;
 
 	constructor(options: Partial<SearchableOptions> = {}) {
 		this.#options = { ...this.#options, ...(options || {}) };
@@ -67,11 +77,11 @@ export class Searchable {
 	}
 
 	/** Access to internal index instance */
-	get __index(): InvertedIndex | TrieIndex {
+	get __index(): Index {
 		return this.#index;
 	}
 
-	/** How many words (including ngrams!) are in the index in total */
+	/** How many words (including n-grams!) are in the index in total */
 	get wordCount(): number {
 		return this.#index.wordCount;
 	}
@@ -236,9 +246,14 @@ export class Searchable {
 	/** Central main API entry. */
 	search(
 		query: string,
-		strategy: "exact" | "prefix" | "fuzzy" = "prefix",
-		options: Partial<{ maxDistance: number }> = {}
+		strategy?: "exact" | "prefix" | "fuzzy",
+		options?: Partial<{ maxDistance: number }>
 	): string[] {
+		strategy ??= this.#options.defaultSearchOptions.strategy ?? "prefix";
+		const {
+			maxDistance = this.#options.defaultSearchOptions.maxDistance ?? 2,
+		} = options || {};
+
 		if (strategy === "exact") {
 			return this.searchExact(query);
 		}
@@ -246,7 +261,7 @@ export class Searchable {
 			return this.searchByPrefix(query);
 		}
 		if (strategy === "fuzzy") {
-			return this.searchFuzzy(query, options?.maxDistance ?? 2);
+			return this.searchFuzzy(query, maxDistance);
 		}
 		throw new TypeError(`Unknown search strategy "${strategy}"`);
 	}
@@ -260,5 +275,20 @@ export class Searchable {
 	/** Will reset and restore the internal index state from the provided dump. */
 	restore(dump: any): boolean {
 		return this.#index.restore(dump);
+	}
+
+	/** Will create a wrap object for multiple index instances with a search method,
+	 * which will proxy to search on each instance and merge the individual results */
+	static merge(indexes: Searchable[]): { search: (query: string) => string[] } {
+		return {
+			search(query: string) {
+				let result = new Set<string>();
+				for (const idx of indexes) {
+					const partial = idx.search(query);
+					result = result.union(new Set([...partial]));
+				}
+				return [...result];
+			},
+		};
 	}
 }

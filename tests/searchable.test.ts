@@ -75,7 +75,7 @@ Deno.test("searchFuzzy works", () => {
 	});
 });
 
-Deno.test("searchByPrefix with ngrams works", () => {
+Deno.test("searchByPrefix with n-grams works", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index, ngramsSize: [3, 4, 5] });
 
@@ -87,7 +87,7 @@ Deno.test("searchByPrefix with ngrams works", () => {
 	});
 });
 
-Deno.test("searchFuzzy with ngrams works", () => {
+Deno.test("searchFuzzy with n-grams works", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index, ngramsSize: [3] });
 
@@ -114,4 +114,71 @@ Deno.test("readme", () => {
 	// );
 	// results = index.searchByPrefix("Bond. James Bond.");
 	// console.log(results);
+});
+
+Deno.test("merged works", () => {
+	const beatles = {
+		j: {
+			email: "john-1@lennon.com",
+			name: "John Lennon",
+			songs: "Imagine; Hey Jude",
+		},
+		p: {
+			email: "p_a_u+l@beatles.com",
+			name: "Paul McCartney",
+			songs: "Yesterday; Let It Be",
+		},
+		g: {
+			email: "george@harrison.co.uk",
+			name: "George Harrison",
+			songs: "Something; Here Comes the Sun",
+		},
+		r: {
+			email: "ringo@beatles.com",
+			name: "Ringo Starr",
+			songs: "Octopus's Garden; Don't Pass Me By",
+		},
+	};
+
+	// emails, names
+	const prefix = new Searchable({
+		defaultSearchOptions: { strategy: "prefix" },
+		nonWordCharWhitelist: "@.-_+",
+		index: "trie",
+		ngramsSize: [3],
+	});
+	// songs
+	const fuzzy = new Searchable({
+		defaultSearchOptions: { strategy: "fuzzy", maxDistance: 1 },
+		querySomeWordMinLength: 3,
+		index: "inverted",
+		nonWordCharWhitelist: "'",
+		ngramsSize: [3, 4],
+	});
+
+	const index = Searchable.merge([prefix, fuzzy]);
+
+	Object.entries(beatles).forEach(([docId, row]) => {
+		prefix.add(
+			[
+				row.email, // full email
+				"@" + row.email.split("@")[1], // domain part only
+				row.name,
+			].join(" "),
+			docId
+		);
+		fuzzy.add(row.songs, docId);
+	});
+
+	let r = index.search("john");
+	// console.log(fuzzy.search("don't"));
+	assertEquals(r, ["j"]);
+
+	r = index.search("@beatles.com");
+	assertEquals(r, ["p", "r"]);
+
+	r = index.search("p_a_u+");
+	assertEquals(r, ["p"]);
+
+	// console.log(JSON.stringify(prefix.dump(false), null, 4));
 });
