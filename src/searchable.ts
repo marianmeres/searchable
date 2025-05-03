@@ -134,8 +134,13 @@ export class Searchable {
 	}
 
 	/** Will add the searchable input string + docId pair to the index. */
-	add(input: string, docId: string): number {
-		this.#assertWordAndDocId(input, docId);
+	add(input: string, docId: string, strict = true): number {
+		try {
+			this.#assertWordAndDocId(input, docId);
+		} catch (e) {
+			if (strict) throw e;
+			return 0;
+		}
 		//
 		const words = this.toWords(input, false);
 		if (!words.length) return 0;

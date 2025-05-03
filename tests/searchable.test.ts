@@ -181,4 +181,5 @@ Deno.test("merged works", () => {
 	assertEquals(r, ["p"]);
 
 	// console.log(JSON.stringify(prefix.dump(false), null, 4));
+	// console.log(JSON.stringify(fuzzy.dump(false), null, 4));
 });

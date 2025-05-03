@@ -22,10 +22,12 @@ function replaceWithJs(_match: any, q1: any, path1: any, q3: any, q4: any, path2
 	}
 }
 
-const srcDir = "./src";
-const outDir = "./.npm-dist";
-const outDirSrc = join(outDir, srcDir);
-const outDirDist = join(outDir, 'dist');
+const srcDir = join(import.meta.dirname!, "../src");
+const outDir = join(import.meta.dirname!, "../.npm-dist");
+const outDirSrc = join(outDir, '/src');
+const outDirDist = join(outDir, '/dist');
+
+console.log({srcDir, outDir, outDirSrc, outDirDist});
 
 await ensureDir(outDir);
 await emptyDir(outDir);
@@ -62,15 +64,6 @@ for (const f of walkSync(outDirSrc)) {
 	}
 }
 
-// compile tsc
-const command = new Deno.Command("tsc", {
-	args: ["-p", join(outDir, "tsconfig.json")],
-});
-let { code, stdout, stderr } = command.outputSync();
-stdout = new TextDecoder().decode(stdout) as any;
-stdout && console.log(stdout);
-if (code) throw new Error(new TextDecoder().decode(stderr));
-
 // create package json
 const packageJson = {
 	name: denoJson.name,
@@ -87,12 +80,26 @@ const packageJson = {
 	bugs: {
 		url: "https://github.com/marianmeres/searchable/issues",
 	},
-	// dependencies: denoJson.d
+	dependencies: {}
 };
 Deno.writeTextFileSync(
 	join(outDir, "package.json"),
 	JSON.stringify(packageJson, null, "\t")
 );
+
+Deno.chdir(outDir);
+
+([
+	// ["npm", { args: ["install"] }],
+	["tsc", { args: ["-p", "tsconfig.json"] }],
+] as [string, { args: string[]}][]).forEach(([cmd, opts]) => {
+	console.log('--> Executing:', cmd, opts);
+	const command = new Deno.Command(cmd, opts);
+	let { code, stdout, stderr } = command.outputSync();
+	stdout = new TextDecoder().decode(stdout) as any;
+	stdout && console.log(stdout);
+	if (code) throw new Error(new TextDecoder().decode(stderr));
+});
 
 // cleanup
 ['tsconfig.json'].forEach((f) => {
@@ -102,4 +109,4 @@ Deno.writeTextFileSync(
 Deno.removeSync(outDirSrc, { recursive: true });
 
 // copy dist to example
-copySync(outDirDist, 'example/dist', { overwrite: true });
+copySync(outDirDist, join(srcDir, '../example/dist'), { overwrite: true });

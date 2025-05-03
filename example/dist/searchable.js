@@ -17,6 +17,10 @@ export class Searchable {
         nonWordCharWhitelist: "@-",
         ngramsSize: 0,
         querySomeWordMinLength: 1,
+        defaultSearchOptions: {
+            strategy: "prefix",
+            maxDistance: 2,
+        },
     };
     #index;
     constructor(options = {}) {
@@ -36,7 +40,7 @@ export class Searchable {
     get __index() {
         return this.#index;
     }
-    /** How many words (including ngrams!) are in the index in total */
+    /** How many words (including n-grams!) are in the index in total */
     get wordCount() {
         return this.#index.wordCount;
     }
@@ -83,8 +87,15 @@ export class Searchable {
         return Array.from(new Set(words));
     }
     /** Will add the searchable input string + docId pair to the index. */
-    add(input, docId) {
-        this.#assertWordAndDocId(input, docId);
+    add(input, docId, strict = true) {
+        try {
+            this.#assertWordAndDocId(input, docId);
+        }
+        catch (e) {
+            if (strict)
+                throw e;
+            return 0;
+        }
         //
         const words = this.toWords(input, false);
         if (!words.length)
@@ -170,7 +181,9 @@ export class Searchable {
         return this.#search((word) => this.#index.searchFuzzy(word, maxDistance, true), query);
     }
     /** Central main API entry. */
-    search(query, strategy = "prefix", options = {}) {
+    search(query, strategy, options) {
+        strategy ??= this.#options.defaultSearchOptions.strategy ?? "prefix";
+        const { maxDistance = this.#options.defaultSearchOptions.maxDistance ?? 2, } = options || {};
         if (strategy === "exact") {
             return this.searchExact(query);
         }
@@ -178,7 +191,7 @@ export class Searchable {
             return this.searchByPrefix(query);
         }
         if (strategy === "fuzzy") {
-            return this.searchFuzzy(query, options?.maxDistance ?? 2);
+            return this.searchFuzzy(query, maxDistance);
         }
         throw new TypeError(`Unknown search strategy "${strategy}"`);
     }
@@ -190,5 +203,19 @@ export class Searchable {
     /** Will reset and restore the internal index state from the provided dump. */
     restore(dump) {
         return this.#index.restore(dump);
+    }
+    /** Will create a wrap object for multiple index instances with a search method,
+     * which will proxy to search on each instance and merge the individual results */
+    static merge(indexes) {
+        return {
+            search(query) {
+                let result = new Set();
+                for (const idx of indexes) {
+                    const partial = idx.search(query);
+                    result = result.union(new Set([...partial]));
+                }
+                return [...result];
+            },
+        };
     }
 }
