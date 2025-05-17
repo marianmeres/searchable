@@ -13,22 +13,26 @@ export function tokenize(
 		nonWordCharWhitelist = "";
 	}
 
-	// Escape special regex characters in the whitelist
-	const escapedWhitelist = nonWordCharWhitelist
+	// save hyphen for later
+	const hasHyphen = nonWordCharWhitelist.includes("-");
+	nonWordCharWhitelist = nonWordCharWhitelist.replaceAll("-", "");
+
+	let escapedWhitelist = nonWordCharWhitelist
 		.split("")
 		.map((char) => char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
 		.join("");
 
-	// Create a Unicode-aware regex:
+	if (hasHyphen) escapedWhitelist = `\\-` + escapedWhitelist;
+
 	// \p{L} - any Unicode letter
 	// \p{N} - any Unicode number/digit
 	// \p{Pc} - connecting punctuation chars like underscore
 	// Add the whitelist characters to what's considered part of a word
 	const wordPattern = new RegExp(
-		`[\\p{L}\\p{N}\\p{Pc}${escapedWhitelist}]+`,
+		`[^\\p{L}\\p{N}\\p{Pc}${escapedWhitelist}]+`,
 		"gu"
 	);
 
-	// Find all matches of the word pattern
-	return Array.from(inputString.matchAll(wordPattern), (match) => match[0]);
+	//
+	return inputString.split(wordPattern).filter((word) => word.length > 0);
 }

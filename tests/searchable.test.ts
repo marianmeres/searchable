@@ -1,5 +1,8 @@
 import { assert, assertEquals } from "@std/assert";
 import { Searchable, type SearchableOptions } from "../src/searchable.ts";
+import { resolve } from "@std/path/resolve";
+
+const clog = console.log;
 
 const docs: Record<string, string> = {
 	1: "How does he repair a leaking new kitchen faucet",
@@ -13,6 +16,7 @@ const docs: Record<string, string> = {
 	9: "Flight status BA287 London to New York",
 	10: "Beginner's guide to growing vegetables in your home office garden",
 	11: "Hey ho let's go",
+	12: "/looks/like/path/to/1234/file.txt",
 };
 
 const createSearchable = (opts: Partial<SearchableOptions> = {}) => {
@@ -114,6 +118,15 @@ Deno.test("readme", () => {
 	// );
 	// results = index.searchByPrefix("Bond. James Bond.");
 	// console.log(results);
+});
+
+Deno.test("with slash", () => {
+	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
+		const idx = createSearchable({ index });
+
+		assertEquals(idx.search("file.txt"), ["12"]);
+		assertEquals(idx.search("to/1234"), ["12"]);
+	});
 });
 
 Deno.test("merged works", () => {
