@@ -36,6 +36,7 @@ export interface SearchableOptions {
 		strategy: "exact" | "prefix" | "fuzzy";
 		maxDistance: number;
 	}>;
+	lastQueryHistoryLength: number;
 }
 
 /**
@@ -56,13 +57,26 @@ export class Searchable {
 			strategy: "prefix",
 			maxDistance: 2,
 		},
+		// how many queries keep as history entries? Just a helper for UI (no direct usage)...
+		lastQueryHistoryLength: 5,
 	};
 
 	#index: Index;
 
-	// just saving last used query... may be useful in some UI situation, so why not do it
-	// when it is basically for free
-	#lastRawQuery: string | undefined;
+	// just saving some meta about last used query... may be useful in some UI cases
+	// (why not do it here when it is basically for free)
+	#lastQuery: {
+		// history of the "used" queries
+		history: string[];
+		// last raw query input (even empty string)
+		raw: string | undefined;
+		// last query truly used in search (value after querySomeWordMinLength applied)
+		used: string | undefined;
+	} = {
+		history: [],
+		raw: undefined,
+		used: undefined,
+	};
 
 	constructor(options: Partial<SearchableOptions> = {}) {
 		this.#options = { ...this.#options, ...(options || {}) };
@@ -91,8 +105,12 @@ export class Searchable {
 	}
 
 	/** Will return last used query used on this instance (or undefined if none exist) */
-	get lastRawQuery(): string | undefined {
-		return this.#lastRawQuery;
+	get lastQuery(): {
+		history: string[];
+		raw: string | undefined;
+		used: string | undefined;
+	} {
+		return this.#lastQuery;
 	}
 
 	#assertWordAndDocId(word: string, docId: string) {
@@ -184,8 +202,10 @@ export class Searchable {
 		worker: (word: string) => string[] | Record<string, number>,
 		query: string
 	) {
-		const { querySomeWordMinLength } = this.#options;
-		const lastRawQuery = query;
+		const { querySomeWordMinLength, lastQueryHistoryLength } = this.#options;
+		// save raw version asap
+		this.#lastQuery.raw = query;
+
 		query = normalize(query, this.#normalizeOptions);
 		const words = this.toWords(query, true);
 
@@ -193,8 +213,12 @@ export class Searchable {
 			return [];
 		}
 
-		// below the possible early return
-		this.#lastRawQuery = lastRawQuery;
+		// save last query meta
+		this.#lastQuery.used = query;
+		this.#lastQuery.history =
+			lastQueryHistoryLength > 0
+				? [...this.#lastQuery.history, query].slice(-1 * lastQueryHistoryLength)
+				: [];
 
 		// array of arrays of found ids for each word... we'll need to intersect for the final result
 		const _foundValues: string[][] = [];

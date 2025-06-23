@@ -159,6 +159,7 @@ Deno.test("merged works", () => {
 		nonWordCharWhitelist: "@.-_+",
 		index: "trie",
 		ngramsSize: [3],
+		lastQueryHistoryLength: 2,
 	});
 	// songs
 	const fuzzy = new Searchable({
@@ -194,8 +195,21 @@ Deno.test("merged works", () => {
 	assertEquals(r, ["p"]);
 
 	//
-	assertEquals(prefix.lastRawQuery, "p_a_u+");
-	assertEquals(fuzzy.lastRawQuery, "p_a_u+");
+	assertEquals(prefix.lastQuery, {
+		history: ["@beatles.com", "p_a_u+"],
+		raw: "p_a_u+",
+		used: "p_a_u+",
+	});
+
+	//
+	fuzzy.search("");
+	assertEquals(fuzzy.lastQuery, {
+		history: ["john", "@beatles.com", "p_a_u+"], // longer history than prefix
+		raw: "", // last raw
+		used: "p_a_u+",
+	});
+	// assertEquals(prefix.lastRawQuery, "p_a_u+");
+	// assertEquals(fuzzy.lastRawQuery, "p_a_u+");
 
 	// console.log(JSON.stringify(prefix.dump(false), null, 4));
 	// console.log(JSON.stringify(fuzzy.dump(false), null, 4));
