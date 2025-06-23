@@ -36,6 +36,8 @@ export declare class Searchable {
     get __index(): Index;
     /** How many words (including n-grams!) are in the index in total */
     get wordCount(): number;
+    /** Will return last used query used on this instance (or undefined if none exist) */
+    get lastRawQuery(): string | undefined;
     /** Will split the input string into words respecting the `nonWordCharWhitelist` options. */
     toWords(input: string, isQuery?: boolean): string[];
     /** Will add the searchable input string + docId pair to the index. */

@@ -23,6 +23,9 @@ export class Searchable {
         },
     };
     #index;
+    // just saving last used query... may be useful in some UI situation, so why not do it
+    // when it is basically for free
+    #lastRawQuery;
     constructor(options = {}) {
         this.#options = { ...this.#options, ...(options || {}) };
         this.#index =
@@ -43,6 +46,10 @@ export class Searchable {
     /** How many words (including n-grams!) are in the index in total */
     get wordCount() {
         return this.#index.wordCount;
+    }
+    /** Will return last used query used on this instance (or undefined if none exist) */
+    get lastRawQuery() {
+        return this.#lastRawQuery;
     }
     #assertWordAndDocId(word, docId) {
         if (!word || typeof word !== "string") {
@@ -125,11 +132,14 @@ export class Searchable {
     /** Internal, low level search worker */
     #search(worker, query) {
         const { querySomeWordMinLength } = this.#options;
+        const lastRawQuery = query;
         query = normalize(query, this.#normalizeOptions);
         const words = this.toWords(query, true);
         if (!words.some((w) => w.length >= querySomeWordMinLength)) {
             return [];
         }
+        // below the possible early return
+        this.#lastRawQuery = lastRawQuery;
         // array of arrays of found ids for each word... we'll need to intersect for the final result
         const _foundValues = [];
         const idToDistance = new Map();

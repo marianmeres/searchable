@@ -1,6 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
 
-import { assertThrows } from "@std/assert/throws";
 import type { Index } from "./lib/index-abstract.ts";
 import { intersect } from "./lib/intersect.ts";
 import { createNgrams, InvertedIndex, TrieIndex } from "./lib/mod.ts";
