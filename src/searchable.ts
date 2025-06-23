@@ -91,7 +91,8 @@ export class Searchable {
 		return this.#index.wordCount;
 	}
 
-	get lastRawQuery() {
+	/** Will return last used query used on this instance (or undefined if none exist) */
+	get lastRawQuery(): string | undefined {
 		return this.#lastRawQuery;
 	}
 
