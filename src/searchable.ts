@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 
+import { assertThrows } from "@std/assert/throws";
 import type { Index } from "./lib/index-abstract.ts";
 import { intersect } from "./lib/intersect.ts";
 import { createNgrams, InvertedIndex, TrieIndex } from "./lib/mod.ts";
@@ -60,6 +61,10 @@ export class Searchable {
 
 	#index: Index;
 
+	// just saving last used query... may be useful in some UI situation, so why not do it
+	// when it is basically for free
+	#lastRawQuery: string | undefined;
+
 	constructor(options: Partial<SearchableOptions> = {}) {
 		this.#options = { ...this.#options, ...(options || {}) };
 
@@ -84,6 +89,10 @@ export class Searchable {
 	/** How many words (including n-grams!) are in the index in total */
 	get wordCount(): number {
 		return this.#index.wordCount;
+	}
+
+	get lastRawQuery() {
+		return this.#lastRawQuery;
 	}
 
 	#assertWordAndDocId(word: string, docId: string) {
@@ -176,12 +185,16 @@ export class Searchable {
 		query: string
 	) {
 		const { querySomeWordMinLength } = this.#options;
+		const lastRawQuery = query;
 		query = normalize(query, this.#normalizeOptions);
 		const words = this.toWords(query, true);
 
 		if (!words.some((w) => w.length >= querySomeWordMinLength)) {
 			return [];
 		}
+
+		// below the possible early return
+		this.#lastRawQuery = lastRawQuery;
 
 		// array of arrays of found ids for each word... we'll need to intersect for the final result
 		const _foundValues: string[][] = [];

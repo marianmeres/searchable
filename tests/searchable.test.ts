@@ -193,6 +193,10 @@ Deno.test("merged works", () => {
 	r = index.search("p_a_u+");
 	assertEquals(r, ["p"]);
 
+	//
+	assertEquals(prefix.lastRawQuery, "p_a_u+");
+	assertEquals(fuzzy.lastRawQuery, "p_a_u+");
+
 	// console.log(JSON.stringify(prefix.dump(false), null, 4));
 	// console.log(JSON.stringify(fuzzy.dump(false), null, 4));
 });
