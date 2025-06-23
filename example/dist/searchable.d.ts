@@ -1,4 +1,5 @@
 import type { Index } from "./lib/index-abstract.js";
+/** Factory options */
 export interface SearchableOptions {
     /** Should be case sensitive? (Default false)*/
     caseSensitive: boolean;
@@ -24,6 +25,16 @@ export interface SearchableOptions {
         strategy: "exact" | "prefix" | "fuzzy";
         maxDistance: number;
     }>;
+    lastQueryHistoryLength: number;
+}
+/** Last query meta info */
+export interface LastQuery {
+    /** history of the "used" queries */
+    history: string[];
+    /** last raw query input (even empty string) */
+    raw: string | undefined;
+    /** last query truly used in search (value after querySomeWordMinLength applied) */
+    used: string | undefined;
 }
 /**
  * High level search API and manager of the internal search flow (input normalization,
@@ -37,7 +48,7 @@ export declare class Searchable {
     /** How many words (including n-grams!) are in the index in total */
     get wordCount(): number;
     /** Will return last used query used on this instance (or undefined if none exist) */
-    get lastRawQuery(): string | undefined;
+    get lastQuery(): LastQuery;
     /** Will split the input string into words respecting the `nonWordCharWhitelist` options. */
     toWords(input: string, isQuery?: boolean): string[];
     /** Will add the searchable input string + docId pair to the index. */

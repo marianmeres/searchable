@@ -21,11 +21,17 @@ export class Searchable {
             strategy: "prefix",
             maxDistance: 2,
         },
+        // how many queries keep as history entries? Just a helper for UI (no direct usage)...
+        lastQueryHistoryLength: 5,
     };
     #index;
-    // just saving last used query... may be useful in some UI situation, so why not do it
-    // when it is basically for free
-    #lastRawQuery;
+    // just saving some meta about last used query... may be useful in some UI cases
+    // (why not do it here when it is basically for free)
+    #lastQuery = {
+        history: [],
+        raw: undefined,
+        used: undefined,
+    };
     constructor(options = {}) {
         this.#options = { ...this.#options, ...(options || {}) };
         this.#index =
@@ -48,8 +54,8 @@ export class Searchable {
         return this.#index.wordCount;
     }
     /** Will return last used query used on this instance (or undefined if none exist) */
-    get lastRawQuery() {
-        return this.#lastRawQuery;
+    get lastQuery() {
+        return this.#lastQuery;
     }
     #assertWordAndDocId(word, docId) {
         if (!word || typeof word !== "string") {
@@ -131,15 +137,20 @@ export class Searchable {
     }
     /** Internal, low level search worker */
     #search(worker, query) {
-        const { querySomeWordMinLength } = this.#options;
-        const lastRawQuery = query;
+        const { querySomeWordMinLength, lastQueryHistoryLength } = this.#options;
+        // save raw version asap
+        this.#lastQuery.raw = query;
         query = normalize(query, this.#normalizeOptions);
         const words = this.toWords(query, true);
         if (!words.some((w) => w.length >= querySomeWordMinLength)) {
             return [];
         }
-        // below the possible early return
-        this.#lastRawQuery = lastRawQuery;
+        // save last query meta
+        this.#lastQuery.used = query;
+        this.#lastQuery.history =
+            lastQueryHistoryLength > 0
+                ? [...this.#lastQuery.history, query].slice(-1 * lastQueryHistoryLength)
+                : [];
         // array of arrays of found ids for each word... we'll need to intersect for the final result
         const _foundValues = [];
         const idToDistance = new Map();

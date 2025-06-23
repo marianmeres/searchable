@@ -11,6 +11,7 @@ interface ParseQueryResult {
 	query: string;
 }
 
+/** Factory options */
 export interface SearchableOptions {
 	/** Should be case sensitive? (Default false)*/
 	caseSensitive: boolean;
@@ -39,6 +40,16 @@ export interface SearchableOptions {
 	lastQueryHistoryLength: number;
 }
 
+/** Last query meta info */
+export interface LastQuery {
+	/** history of the "used" queries */
+	history: string[];
+	/** last raw query input (even empty string) */
+	raw: string | undefined;
+	/** last query truly used in search (value after querySomeWordMinLength applied) */
+	used: string | undefined;
+}
+
 /**
  * High level search API and manager of the internal search flow (input normalization,
  * tokenizing, options handling...)
@@ -65,14 +76,7 @@ export class Searchable {
 
 	// just saving some meta about last used query... may be useful in some UI cases
 	// (why not do it here when it is basically for free)
-	#lastQuery: {
-		// history of the "used" queries
-		history: string[];
-		// last raw query input (even empty string)
-		raw: string | undefined;
-		// last query truly used in search (value after querySomeWordMinLength applied)
-		used: string | undefined;
-	} = {
+	#lastQuery: LastQuery = {
 		history: [],
 		raw: undefined,
 		used: undefined,
@@ -105,11 +109,7 @@ export class Searchable {
 	}
 
 	/** Will return last used query used on this instance (or undefined if none exist) */
-	get lastQuery(): {
-		history: string[];
-		raw: string | undefined;
-		used: string | undefined;
-	} {
+	get lastQuery(): LastQuery {
 		return this.#lastQuery;
 	}
 
