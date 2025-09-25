@@ -36,3 +36,11 @@ Deno.test("path like", () => {
 	words = tokenize("/path/like/123", "'-@");
 	assertEquals(words.join(), "path,like,123");
 });
+
+Deno.test("float", () => {
+	let words = tokenize("12.34");
+	assertEquals(words.join(), "12,34");
+
+	words = tokenize("12.34", ".");
+	assertEquals(words, ["12.34"]);
+});
