@@ -16,7 +16,7 @@ const docs: Record<string, string> = {
 	9: "Flight status BA287 London to New York",
 	10: "Beginner's guide to growing vegetables in your home office garden",
 	11: "Hey ho let's go",
-	12: "/looks/like/path/to/1234/file.txt",
+	12: "/looks/like-path/to/1234/file.txt",
 };
 
 const createSearchable = (opts: Partial<SearchableOptions> = {}) => {
@@ -126,6 +126,14 @@ Deno.test("with slash", () => {
 
 		assertEquals(idx.search("file.txt"), ["12"]);
 		assertEquals(idx.search("to/1234"), ["12"]);
+	});
+});
+
+Deno.test("empty nonWordCharWhitelist", () => {
+	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
+		const idx = createSearchable({ index, nonWordCharWhitelist: "" });
+
+		assertEquals(idx.search("path"), ["12"]);
 	});
 });
 
