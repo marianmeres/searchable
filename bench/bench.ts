@@ -1,5 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
-
 import { Searchable } from "../src/searchable.ts";
 import { movies } from "./movies.js";
 

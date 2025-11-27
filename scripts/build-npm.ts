@@ -1,5 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
-
 import { ensureDir, emptyDir, copySync, walkSync } from "@std/fs";
 import { join } from "@std/path";
 import denoJson from "../deno.json" with { type: "json" };

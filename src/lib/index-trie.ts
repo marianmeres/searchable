@@ -1,5 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
-
 import { Index } from "./index-abstract.ts";
 import { levenshteinDistance } from "./levenshtein.ts";
 

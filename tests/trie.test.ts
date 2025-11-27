@@ -1,5 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
-
 import { assertEquals } from "@std/assert";
 import { TrieIndex } from "../src/lib/index-trie.ts";
 
