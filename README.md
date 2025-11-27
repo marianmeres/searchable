@@ -116,3 +116,49 @@ const index = new Searchable({
 
 ```
 
+## Choosing Between Inverted and Trie Index
+
+Both implementations provide the same API, but have different performance characteristics:
+
+### Inverted Index (default)
+```typescript
+const index = new Searchable({ index: "inverted" });
+```
+
+**Pros:**
+- Faster exact searches (direct hash map lookup)
+- Better memory efficiency for most use cases
+- Simpler implementation, easier to debug
+
+**Cons:**
+- Prefix search iterates all words (O(n) where n = total words)
+- Can be slow with very large vocabularies
+
+**Use when:**
+- You have < 100k unique words
+- Exact and fuzzy search are more important than prefix
+- Memory is a concern
+
+### Trie Index
+```typescript
+const index = new Searchable({ index: "trie" });
+```
+
+**Pros:**
+- Extremely fast prefix searches (O(k) where k = prefix length)
+- Natural structure for autocomplete
+- No need to iterate all words for prefix matching
+
+**Cons:**
+- Higher memory overhead (node objects + pointers)
+- Exact search slightly slower (must traverse tree)
+
+**Use when:**
+- Prefix search is your primary use case (autocomplete, typeahead)
+- You have > 100k unique words
+- You can afford extra memory
+
+### Benchmark Recommendation
+For typical use cases with mixed search strategies, **inverted index** is recommended.
+If you're building autocomplete, run the [bench script](bench/bench.ts) with your data to decide.
+

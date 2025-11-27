@@ -114,6 +114,7 @@ export class TrieIndex extends Index {
 
 		// Mark as end of word and add docId
 		currentNode.isEOW = true;
+		const isNewEntry = !currentNode.docIds.has(docId);
 		currentNode.docIds.add(docId);
 
 		// Update document-word mapping
@@ -122,7 +123,7 @@ export class TrieIndex extends Index {
 		}
 		this.#docIdToWords.get(docId)!.add(word);
 
-		return true;
+		return isNewEntry;
 	}
 
 	/**

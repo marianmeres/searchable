@@ -137,6 +137,64 @@ Deno.test("empty nonWordCharWhitelist", () => {
 	});
 });
 
+Deno.test("addBatch works with array", () => {
+	const index = new Searchable({ index: "inverted" });
+
+	const result = index.addBatch([
+		["doc1", "james bond"],
+		["doc2", "mission impossible"],
+		["doc3", "indiana jones"],
+	]);
+
+	assertEquals(result.errors.length, 0);
+	assertEquals(result.added > 0, true);
+
+	const search1 = index.search("bond");
+	assertEquals(search1, ["doc1"]);
+
+	const search2 = index.search("mission");
+	assertEquals(search2, ["doc2"]);
+});
+
+Deno.test("addBatch works with object", () => {
+	const index = new Searchable({ index: "trie" });
+
+	const result = index.addBatch({
+		doc1: "james bond",
+		doc2: "mission impossible",
+		doc3: "indiana jones",
+	});
+
+	assertEquals(result.errors.length, 0);
+	assertEquals(result.added > 0, true);
+
+	const search = index.search("jones");
+	assertEquals(search, ["doc3"]);
+});
+
+Deno.test("addBatch handles errors in non-strict mode", () => {
+	const index = new Searchable();
+
+	const result = index.addBatch([
+		["doc1", "valid text"],
+		["", "invalid docId"], // This should error
+		["doc2", ""], // This should error
+		["doc3", "another valid text"],
+	], false); // non-strict mode
+
+	// Should have added the valid entries
+	assertEquals(result.added > 0, true);
+	// Should have collected errors
+	assertEquals(result.errors.length, 2);
+	assertEquals(result.errors[0].docId, "");
+	assertEquals(result.errors[1].docId, "doc2");
+
+	// Valid entries should be searchable
+	const search = index.search("valid");
+	assert(search.includes("doc1"));
+	assert(search.includes("doc3"));
+});
+
 Deno.test("merged works", () => {
 	const beatles = {
 		j: {
