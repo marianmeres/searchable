@@ -1,6 +1,6 @@
 {
 	"name": "@marianmeres/searchable",
-	"version": "2.2.1",
+	"version": "2.3.0",
 	"exports": "./src/mod.ts",
 	"tasks": {
 		"test": "deno test --watch",
