@@ -162,3 +162,9 @@ const index = new Searchable({ index: "trie" });
 For typical use cases with mixed search strategies, **inverted index** is recommended.
 If you're building autocomplete, run the [bench script](bench/bench.ts) with your data to decide.
 
+## Package Identity
+
+- **Name:** @marianmeres/searchable
+- **Author:** Marian Meres
+- **Repository:** https://github.com/marianmeres/searchable
+- **License:** MIT

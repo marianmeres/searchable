@@ -1,4 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
 import { Index } from "./index-abstract.js";
 import { levenshteinDistance } from "./levenshtein.js";
 /**
@@ -101,13 +100,14 @@ export class TrieIndex extends Index {
         }
         // Mark as end of word and add docId
         currentNode.isEOW = true;
+        const isNewEntry = !currentNode.docIds.has(docId);
         currentNode.docIds.add(docId);
         // Update document-word mapping
         if (!this.#docIdToWords.has(docId)) {
             this.#docIdToWords.set(docId, new Set());
         }
         this.#docIdToWords.get(docId).add(word);
-        return true;
+        return isNewEntry;
     }
     /**
      * Removes a word and associated docId from the index
