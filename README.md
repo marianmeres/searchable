@@ -1,5 +1,8 @@
 # @marianmeres/searchable
 
+[![NPM version](https://img.shields.io/npm/v/@marianmeres/searchable.svg)](https://www.npmjs.com/package/@marianmeres/searchable)
+[![JSR version](https://jsr.io/badges/@marianmeres/searchable)](https://jsr.io/@marianmeres/searchable)
+
 Customizable fast text search index featuring:
 - Extremely fast "exact" word matching
 - Super fast word "prefix" searching (catches the beginning of words)
