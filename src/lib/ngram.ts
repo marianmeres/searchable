@@ -1,5 +1,29 @@
 /**
- * Generates n-grams from an input string optimized for fuzzy search applications.
+ * Generates character n-grams from an input string.
+ *
+ * N-grams are contiguous sequences of n characters extracted from the input text.
+ * They are useful for fuzzy search as they capture local character patterns,
+ * making searches more tolerant to typos and partial matches.
+ *
+ * @param normalizedText - The input string (should be pre-normalized)
+ * @param size - The size of each n-gram (default: 3)
+ * @param options - Configuration options
+ * @param options.padChar - Character used to pad boundaries. Empty string disables padding (default: " ")
+ * @returns Array of n-gram strings
+ *
+ * @example
+ * ```ts
+ * import { createNgrams } from '@marianmeres/searchable';
+ *
+ * createNgrams("hello", 3);
+ * // returns: ["  h", " he", "hel", "ell", "llo", "lo ", "o  "] (with default space padding)
+ *
+ * createNgrams("hello", 3, { padChar: "" });
+ * // returns: ["hel", "ell", "llo"] (without padding)
+ *
+ * createNgrams("test", 4, { padChar: "" });
+ * // returns: ["test"]
+ * ```
  */
 export function createNgrams(
 	normalizedText: string,

@@ -1,96 +1,588 @@
-import { intersect } from "./lib/intersect.js";
-import { createNgrams, InvertedIndex, TrieIndex } from "./lib/mod.js";
-import { normalize } from "./lib/normalize.js";
-import { tokenize } from "./lib/tokenize.js";
-/**
- * High level search API and manager of the internal search flow (input normalization,
- * tokenizing, options handling...).
- *
- * Provides three search strategies:
- * - **exact**: Fast exact word matching
- * - **prefix**: Super fast prefix searching (catches the beginning of words)
- * - **fuzzy**: Reasonably fast fuzzy searching (handles typos using Levenshtein distance)
- *
- * @example
- * ```ts
- * import { Searchable } from '@marianmeres/searchable';
- *
- * const index = new Searchable();
- * index.add('james bond', '007');
- *
- * const results = index.search('Bond. James Bond.');
- * // returns: ['007']
- * ```
- */
-export class Searchable {
+function intersect(...arrays) {
+    const [array, ...otherArrays] = arrays;
+    let set = new Set(array);
+    for (const array of otherArrays){
+        set = set.intersection(new Set(array));
+        if (set.size === 0) break;
+    }
+    return [
+        ...set
+    ];
+}
+export { intersect as intersect };
+class Index {
+}
+function levenshteinDistance(source, target) {
+    const matrix = [];
+    for(let i = 0; i <= source.length; i++){
+        matrix[i] = [
+            i
+        ];
+    }
+    for(let j = 0; j <= target.length; j++){
+        matrix[0][j] = j;
+    }
+    for(let i = 1; i <= source.length; i++){
+        for(let j = 1; j <= target.length; j++){
+            const cost = source[i - 1] === target[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+        }
+    }
+    return matrix[source.length][target.length];
+}
+export { levenshteinDistance as levenshteinDistance };
+class InvertedIndex extends Index {
+    #wordToDocIds = new Map();
+    #docIdToWords = new Map();
+    get wordCount() {
+        return this.#wordToDocIds.size;
+    }
+    get docIdCount() {
+        return this.#docIdToWords.size;
+    }
+    getAllWords() {
+        return [
+            ...this.#wordToDocIds.keys()
+        ];
+    }
+    getAllDocIds() {
+        return [
+            ...this.#docIdToWords.keys()
+        ];
+    }
+    #assertWordAndDocId(word, docId) {
+        if (!word || typeof word !== "string") {
+            throw new Error("Word must be a non-empty string");
+        }
+        if (!docId || typeof docId !== "string") {
+            throw new Error("DocId must be a non-empty string");
+        }
+    }
+    addWord(word, docId) {
+        this.#assertWordAndDocId(word, docId);
+        if (!this.#wordToDocIds.has(word)) {
+            this.#wordToDocIds.set(word, new Set());
+        }
+        const docIds = this.#wordToDocIds.get(word);
+        const isNewEntry = !docIds.has(docId);
+        docIds.add(docId);
+        if (!this.#docIdToWords.has(docId)) {
+            this.#docIdToWords.set(docId, new Set());
+        }
+        this.#docIdToWords.get(docId).add(word);
+        return isNewEntry;
+    }
+    removeWord(word, docId) {
+        this.#assertWordAndDocId(word, docId);
+        const docIds = this.#wordToDocIds.get(word);
+        if (!docIds) return false;
+        const removed = docIds.delete(docId);
+        if (docIds.size === 0) {
+            this.#wordToDocIds.delete(word);
+        }
+        const words = this.#docIdToWords.get(docId);
+        if (words) {
+            words.delete(word);
+            if (words.size === 0) {
+                this.#docIdToWords.delete(docId);
+            }
+        }
+        return removed;
+    }
+    removeDocId(docId) {
+        const words = this.#docIdToWords.get(docId);
+        if (!words) return 0;
+        const count = words.size;
+        for (const word of words){
+            const docIds = this.#wordToDocIds.get(word);
+            docIds.delete(docId);
+            if (docIds.size === 0) {
+                this.#wordToDocIds.delete(word);
+            }
+        }
+        this.#docIdToWords.delete(docId);
+        return count;
+    }
+    searchExact(word) {
+        const result = this.#wordToDocIds.get(word);
+        return result ? [
+            ...new Set(result)
+        ] : [];
+    }
+    searchByPrefix(prefix, returnWithDistance = false) {
+        const results = new Set();
+        const idToDistance = new Map();
+        for (const [word, docIds] of this.#wordToDocIds.entries()){
+            if (word.startsWith(prefix)) {
+                const distance = levenshteinDistance(prefix, word);
+                docIds.forEach((id)=>{
+                    results.add(id);
+                    if (idToDistance.has(id)) {
+                        idToDistance.set(id, Math.min(distance, idToDistance.get(id)));
+                    } else {
+                        idToDistance.set(id, distance);
+                    }
+                });
+            }
+        }
+        if (returnWithDistance) {
+            return results.values().reduce((m, id)=>{
+                m[id] = idToDistance.get(id);
+                return m;
+            }, {});
+        }
+        const sortByDistanceAsc = (a, b)=>idToDistance.get(a) - idToDistance.get(b);
+        return [
+            ...results
+        ].toSorted(sortByDistanceAsc);
+    }
+    searchByDocId(docId) {
+        const words = this.#docIdToWords.get(docId);
+        return words ? [
+            ...new Set(words)
+        ] : [];
+    }
+    searchFuzzy(word, maxDistance = 2, returnWithDistance = false) {
+        const results = new Set();
+        const idToDistance = new Map();
+        for (const [indexedWord, docIds] of this.#wordToDocIds.entries()){
+            const distance = levenshteinDistance(word, indexedWord);
+            if (distance <= maxDistance) {
+                docIds.forEach((id)=>{
+                    results.add(id);
+                    if (idToDistance.has(id)) {
+                        idToDistance.set(id, Math.min(distance, idToDistance.get(id)));
+                    } else {
+                        idToDistance.set(id, distance);
+                    }
+                });
+            }
+        }
+        if (returnWithDistance) {
+            return results.values().reduce((m, id)=>{
+                m[id] = idToDistance.get(id);
+                return m;
+            }, {});
+        }
+        const sortByDistanceAsc = (a, b)=>idToDistance.get(a) - idToDistance.get(b);
+        return [
+            ...results
+        ].toSorted(sortByDistanceAsc);
+    }
+    dump() {
+        const words = {};
+        for (const [word, docIds] of this.#wordToDocIds.entries()){
+            words[word] = [
+                ...docIds
+            ];
+        }
+        return {
+            words,
+            version: "1.0"
+        };
+    }
+    restore(data) {
+        try {
+            if (typeof data === "string") {
+                data = JSON.parse(data);
+            }
+            if (!data || !data.words) {
+                return false;
+            }
+            this.#wordToDocIds.clear();
+            this.#docIdToWords.clear();
+            for (const [word, docIds] of Object.entries(data.words)){
+                this.#wordToDocIds.set(word, new Set(docIds));
+                for (const docId of docIds.values()){
+                    if (!this.#docIdToWords.has(docId)) {
+                        this.#docIdToWords.set(docId, new Set());
+                    }
+                    this.#docIdToWords.get(docId).add(word);
+                }
+            }
+            return true;
+        } catch (e) {
+            console.error("Error restoring index", e);
+            throw new Error("Error restoring index");
+        }
+    }
+}
+export { InvertedIndex as InvertedIndex };
+function createNgrams(normalizedText, size = 3, options = {}) {
+    if (typeof normalizedText !== "string") {
+        throw new TypeError("Input text must be a string");
+    }
+    if (normalizedText.length === 0) {
+        return [];
+    }
+    const { padChar = " " } = options || {};
+    let paddedText = normalizedText;
+    if (padChar.length === 1) {
+        const padString = padChar.repeat(size - 1);
+        paddedText = padString + normalizedText + padString;
+    }
+    const chars = [
+        ...paddedText
+    ];
+    if (chars.length < size) {
+        return [];
+    }
+    const ngrams = [];
+    for(let i = 0; i <= chars.length - size; i++){
+        const ngram = chars.slice(i, i + size).join("");
+        ngrams.push(ngram);
+    }
+    return ngrams;
+}
+export { createNgrams as createNgrams };
+function unaccent(input) {
+    return input.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+export { unaccent as unaccent };
+const DEFAULT_OPTIONS = {
+    caseSensitive: false,
+    accentSensitive: false
+};
+function normalize(input, options = {}) {
+    input = `${input}`.trim();
+    const { caseSensitive, accentSensitive } = {
+        ...DEFAULT_OPTIONS,
+        ...options || {}
+    };
+    if (!caseSensitive) {
+        input = input.toLowerCase();
+    }
+    if (!accentSensitive) {
+        input = unaccent(input);
+    }
+    return input;
+}
+export { normalize as normalize };
+function tokenize(inputString, nonWordCharWhitelist = "") {
+    if (typeof inputString !== "string") {
+        return [];
+    }
+    if (typeof nonWordCharWhitelist !== "string") {
+        nonWordCharWhitelist = "";
+    }
+    const hasHyphen = nonWordCharWhitelist.includes("-");
+    nonWordCharWhitelist = nonWordCharWhitelist.replaceAll("-", "");
+    let escapedWhitelist = nonWordCharWhitelist.split("").map((__char)=>__char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("");
+    if (hasHyphen) escapedWhitelist = `\\-` + escapedWhitelist;
+    const wordPattern = new RegExp(`[^\\p{L}\\p{N}\\p{Pc}${escapedWhitelist}]+`, "gu");
+    return inputString.split(wordPattern).filter((word)=>word.length > 0);
+}
+export { tokenize as tokenize };
+class TrieNode {
+    children;
+    isEOW;
+    docIds;
+    constructor(children = new Map(), isEOW = false, docIds = new Set()){
+        this.children = children;
+        this.isEOW = isEOW;
+        this.docIds = docIds;
+    }
+    toJSON() {
+        return {
+            children: Object.fromEntries(this.children.entries()),
+            isEOW: this.isEOW,
+            docIds: [
+                ...this.docIds
+            ]
+        };
+    }
+    __toCharTrie(_tree = {}, _node) {
+        _node ??= this;
+        _node?.children?.entries().forEach(([__char, node])=>{
+            _tree[__char] ??= {};
+            this.__toCharTrie(_tree[__char], node);
+        });
+        return _tree;
+    }
+}
+class TrieIndex extends Index {
+    #root;
+    #docIdToWords = new Map();
+    constructor(){
+        super();
+        this.#root = new TrieNode();
+    }
+    toJSON() {
+        return this.#root.toJSON().children;
+    }
+    get wordCount() {
+        const words = new Set();
+        this.#docIdToWords.values().forEach((_words)=>{
+            _words.forEach((w)=>words.add(w));
+        });
+        return words.size;
+    }
+    get docIdCount() {
+        return this.#docIdToWords.size;
+    }
+    getAllWords() {
+        return [
+            ...this.#collectAllWords().keys()
+        ];
+    }
+    getAllDocIds() {
+        return [
+            ...this.#docIdToWords.keys()
+        ];
+    }
+    #assertWordAndDocId(word, docId) {
+        if (!word || typeof word !== "string") {
+            throw new Error("Word must be a non-empty string");
+        }
+        if (!docId || typeof docId !== "string") {
+            throw new Error("DocId must be a non-empty string");
+        }
+    }
+    addWord(word, docId) {
+        this.#assertWordAndDocId(word, docId);
+        let currentNode = this.#root;
+        for (const __char of word){
+            if (!currentNode.children.has(__char)) {
+                currentNode.children.set(__char, new TrieNode());
+            }
+            currentNode = currentNode.children.get(__char);
+        }
+        currentNode.isEOW = true;
+        const isNewEntry = !currentNode.docIds.has(docId);
+        currentNode.docIds.add(docId);
+        if (!this.#docIdToWords.has(docId)) {
+            this.#docIdToWords.set(docId, new Set());
+        }
+        this.#docIdToWords.get(docId).add(word);
+        return isNewEntry;
+    }
+    removeWord(word, docId) {
+        this.#assertWordAndDocId(word, docId);
+        const result = this.#removeWordFromTrie(this.#root, word, 0, docId);
+        if (result && this.#docIdToWords.has(docId)) {
+            this.#docIdToWords.get(docId).delete(word);
+            if (this.#docIdToWords.get(docId).size === 0) {
+                this.#docIdToWords.delete(docId);
+            }
+        }
+        return result;
+    }
+    removeDocId(docId) {
+        if (!this.#docIdToWords.has(docId)) {
+            return 0;
+        }
+        const words = [
+            ...this.#docIdToWords.get(docId)
+        ];
+        let removedCount = 0;
+        for (const word of words){
+            if (this.#removeWordFromTrie(this.#root, word, 0, docId)) {
+                removedCount++;
+            }
+        }
+        this.#docIdToWords.delete(docId);
+        return removedCount;
+    }
+    searchExact(word) {
+        let currentNode = this.#root;
+        for (const __char of word){
+            if (!currentNode.children.has(__char)) {
+                return [];
+            }
+            currentNode = currentNode.children.get(__char);
+        }
+        if (!currentNode.isEOW) {
+            return [];
+        }
+        return [
+            ...new Set(currentNode.docIds)
+        ];
+    }
+    searchByPrefix(prefix, returnWithDistance = false) {
+        let currentNode = this.#root;
+        const resultsMap = new Map();
+        const results = new Set();
+        const idToDistance = new Map();
+        for (const __char of prefix){
+            if (!currentNode.children.has(__char)) {
+                return [];
+            }
+            currentNode = currentNode.children.get(__char);
+        }
+        this.#collectWords(currentNode, prefix, resultsMap);
+        resultsMap.entries().forEach(([word, docIds])=>{
+            docIds.forEach((id)=>{
+                results.add(id);
+                const distance = levenshteinDistance(prefix, word);
+                if (idToDistance.has(id)) {
+                    idToDistance.set(id, Math.min(distance, idToDistance.get(id)));
+                } else {
+                    idToDistance.set(id, distance);
+                }
+            });
+        });
+        if (returnWithDistance) {
+            return results.values().reduce((m, id)=>{
+                m[id] = idToDistance.get(id);
+                return m;
+            }, {});
+        }
+        const sortByDistanceAsc = (a, b)=>idToDistance.get(a) - idToDistance.get(b);
+        return [
+            ...results
+        ].toSorted(sortByDistanceAsc);
+    }
+    searchByDocId(docId) {
+        const words = this.#docIdToWords.get(docId);
+        return words ? [
+            ...new Set(words)
+        ] : [];
+    }
+    searchFuzzy(word, maxDistance = 2, returnWithDistance = false) {
+        const results = new Set();
+        const idToDistance = new Map();
+        const all = this.#collectAllWords();
+        for (const [indexedWord, docIds] of all.entries()){
+            const distance = levenshteinDistance(word, indexedWord);
+            if (distance <= maxDistance) {
+                docIds.forEach((id)=>{
+                    results.add(id);
+                    if (idToDistance.has(id)) {
+                        idToDistance.set(id, Math.min(distance, idToDistance.get(id)));
+                    } else {
+                        idToDistance.set(id, distance);
+                    }
+                });
+            }
+        }
+        if (returnWithDistance) {
+            return results.values().reduce((m, id)=>{
+                m[id] = idToDistance.get(id);
+                return m;
+            }, {});
+        }
+        const sortByDistanceAsc = (a, b)=>idToDistance.get(a) - idToDistance.get(b);
+        return [
+            ...results
+        ].toSorted(sortByDistanceAsc);
+    }
+    #removeWordFromTrie(node, word, index, docId) {
+        if (index === word.length) {
+            if (!node.isEOW) {
+                return false;
+            }
+            const result = node.docIds.delete(docId);
+            if (node.docIds.size === 0) {
+                node.isEOW = false;
+            }
+            return result;
+        }
+        const __char = word[index];
+        if (!node.children.has(__char)) {
+            return false;
+        }
+        const childNode = node.children.get(__char);
+        const result = this.#removeWordFromTrie(childNode, word, index + 1, docId);
+        if (childNode.children.size === 0 && !childNode.isEOW) {
+            node.children.delete(__char);
+        }
+        return result;
+    }
+    #collectWords(node, currentWord, results = new Map()) {
+        if (node.isEOW) {
+            results.set(currentWord, new Set(node.docIds));
+        }
+        for (const [__char, childNode] of node.children.entries()){
+            this.#collectWords(childNode, currentWord + __char, results);
+        }
+    }
+    #collectAllWords() {
+        const results = new Map();
+        this.#collectWords(this.#root, "", results);
+        return results;
+    }
+    dump() {
+        const allWords = this.#collectAllWords();
+        const out = {
+            words: {},
+            version: "1.0"
+        };
+        for (const [word, docIds] of allWords){
+            out.words[word] = [
+                ...docIds
+            ];
+        }
+        return out;
+    }
+    restore(data) {
+        try {
+            if (typeof data === "string") {
+                data = JSON.parse(data);
+            }
+            if (!data || !data.words) {
+                return false;
+            }
+            this.#root = new TrieNode();
+            this.#docIdToWords.clear();
+            for (const [word, docIds] of Object.entries(data.words)){
+                for (const docId of docIds){
+                    this.addWord(word, docId);
+                }
+            }
+            return true;
+        } catch (e) {
+            console.error("Error restoring index", e);
+            throw new Error("Error restoring index");
+        }
+    }
+    __toCharTrie() {
+        const tree = {};
+        this.#root.__toCharTrie(tree);
+        return tree;
+    }
+}
+export { TrieIndex as TrieIndex };
+class Searchable {
     #options = {
         caseSensitive: false,
         accentSensitive: false,
-        isStopword: (_w) => false, // no filter by default
-        normalizeWord: (word) => word, // noop by default
+        isStopword: (_w)=>false,
+        normalizeWord: (word)=>word,
         index: "inverted",
         nonWordCharWhitelist: "@-",
         ngramsSize: 0,
         querySomeWordMinLength: 1,
         defaultSearchOptions: {
             strategy: "prefix",
-            maxDistance: 2,
+            maxDistance: 2
         },
-        // how many queries keep as history entries? Just a helper for UI (no direct usage)...
-        lastQueryHistoryLength: 5,
+        lastQueryHistoryLength: 5
     };
     #index;
-    // just saving some meta about last used query... may be useful in some UI cases
-    // (why not do it here when it is basically for free)
     #lastQuery = {
         history: [],
         raw: undefined,
-        used: undefined,
+        used: undefined
     };
-    /**
-     * Creates a new Searchable index instance.
-     *
-     * @param options - Configuration options for the index
-     * @param options.caseSensitive - Should "Foo" and "foo" be distinct? (default: false)
-     * @param options.accentSensitive - Should "cafe" and "café" be distinct? (default: false)
-     * @param options.isStopword - Function to check if a word should be ignored (default: none)
-     * @param options.normalizeWord - Custom normalizer for stemming, aliases, etc. (default: noop)
-     * @param options.index - Which implementation to use: "inverted" or "trie" (default: "inverted")
-     * @param options.nonWordCharWhitelist - Characters to include in words (default: "@-")
-     * @param options.ngramsSize - N-gram sizes to generate, or 0 to disable (default: 0)
-     * @param options.querySomeWordMinLength - Skip search if all query words are shorter (default: 1)
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable({
-     *   caseSensitive: false,
-     *   index: "inverted",
-     *   ngramsSize: [3, 4],
-     * });
-     * ```
-     */
-    constructor(options = {}) {
-        this.#options = { ...this.#options, ...(options || {}) };
-        this.#index =
-            this.#options.index === "inverted"
-                ? new InvertedIndex()
-                : new TrieIndex();
+    constructor(options = {}){
+        this.#options = {
+            ...this.#options,
+            ...options || {}
+        };
+        this.#index = this.#options.index === "inverted" ? new InvertedIndex() : new TrieIndex();
     }
     get #normalizeOptions() {
         return {
             caseSensitive: this.#options.caseSensitive,
-            accentSensitive: this.#options.accentSensitive,
+            accentSensitive: this.#options.accentSensitive
         };
     }
-    /** Access to internal index instance */
     get __index() {
         return this.#index;
     }
-    /** How many words (including n-grams!) are in the index in total */
     get wordCount() {
         return this.#index.wordCount;
     }
-    /** Will return last used query used on this instance (or undefined if none exist) */
     get lastQuery() {
         return this.#lastQuery;
     }
@@ -102,104 +594,53 @@ export class Searchable {
             throw new Error("DocId must be a non-empty string");
         }
     }
-    /**
-     * Splits the input string into words respecting the `nonWordCharWhitelist` option.
-     *
-     * This method applies normalization, tokenization, stopword filtering, and custom
-     * word normalization according to the configured options.
-     *
-     * @param input - The string to tokenize
-     * @param isQuery - Whether this is a search query (affects processing)
-     * @returns Array of unique normalized words
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     * const words = index.toWords("Café-Restaurant in São Paulo");
-     * // returns: ["cafe", "restaurant", "in", "sao", "paulo"]
-     * ```
-     */
     toWords(input, isQuery = false) {
-        // 1. normalize
         input = normalize(input, this.#normalizeOptions);
-        // 2. tokenize to words
         let words = tokenize(input, this.#options.nonWordCharWhitelist);
-        // first round stopwords filter
-        words = words.filter((w) => w && !this.#options.isStopword(w));
-        // when adding to index, apply few more steps...
+        words = words.filter((w)=>w && !this.#options.isStopword(w));
         if (!isQuery) {
-            // normalizeWord can return array of new words
-            words = words.reduce((m, word) => {
+            words = words.reduce((m, word)=>{
                 const w = this.#options.normalizeWord(word);
                 if (w && Array.isArray(w)) {
-                    m = [...m, ...w];
-                }
-                else if (w) {
+                    m = [
+                        ...m,
+                        ...w
+                    ];
+                } else if (w) {
                     m.push(w);
                 }
                 return m;
             }, []);
-            // finalize... since normalizeWordabove may have changed words, must normalize again
-            words = words
-                .map((w) => {
+            words = words.map((w)=>{
                 w = normalize(w, this.#normalizeOptions);
-                if (w && this.#options.isStopword(w))
-                    w = "";
+                if (w && this.#options.isStopword(w)) w = "";
                 return w;
-            })
-                .filter(Boolean);
+            }).filter(Boolean);
         }
-        // unique
         return Array.from(new Set(words));
     }
-    /**
-     * Adds a searchable text string to the index associated with a document ID.
-     *
-     * The input string will be normalized, tokenized, and processed according to
-     * the configured options (case sensitivity, stop words, normalizers, n-grams, etc).
-     * Each unique word extracted from the input is indexed with the provided docId.
-     *
-     * @param input - The searchable text to index
-     * @param docId - Unique identifier for the document
-     * @param strict - If true, throws on invalid input. If false, silently returns 0
-     * @returns Number of new word-docId pairs added to the index
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     * const added = index.add("james bond", "007");
-     * console.log(`Added ${added} word-document pairs`);
-     * ```
-     *
-     * @throws {Error} If input or docId is invalid and strict is true
-     */
     add(input, docId, strict = true) {
         try {
             this.#assertWordAndDocId(input, docId);
-        }
-        catch (e) {
-            if (strict)
-                throw e;
+        } catch (e) {
+            if (strict) throw e;
             return 0;
         }
-        //
         const words = this.toWords(input, false);
-        if (!words.length)
-            return 0;
+        if (!words.length) return 0;
         let added = 0;
-        for (const word of words) {
+        for (const word of words){
             added += Number(this.#index.addWord(word, docId));
-            // should we use n-grams?
             if (this.#options.ngramsSize) {
-                const ngramsSizes = Array.isArray(this.#options.ngramsSize)
-                    ? this.#options.ngramsSize
-                    : [this.#options.ngramsSize];
-                for (const ngramsSize of ngramsSizes) {
+                const ngramsSizes = Array.isArray(this.#options.ngramsSize) ? this.#options.ngramsSize : [
+                    this.#options.ngramsSize
+                ];
+                for (const ngramsSize of ngramsSizes){
                     if (ngramsSize > 0) {
                         const ngs = createNgrams(word, ngramsSize, {
-                            padChar: "", // no padding
+                            padChar: ""
                         });
-                        for (const ng of ngs) {
+                        for (const ng of ngs){
                             added += Number(this.#index.addWord(ng, docId));
                         }
                     }
@@ -208,98 +649,51 @@ export class Searchable {
         }
         return added;
     }
-    /**
-     * Efficiently adds multiple documents to the index in batch.
-     *
-     * This is more convenient than calling add() in a loop for initial data loading.
-     * Accepts either an array of [docId, text] tuples or a Record<docId, text> object.
-     *
-     * @param documents - Array of [docId, text] tuples or Record<docId, text>
-     * @param strict - If true, stops on first error. If false, continues and collects errors
-     * @returns Object with count of added entries and any errors encountered
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     *
-     * // Array format
-     * const result = index.addBatch([
-     *   ["doc1", "james bond"],
-     *   ["doc2", "mission impossible"],
-     * ]);
-     *
-     * // Object format
-     * index.addBatch({
-     *   doc1: "james bond",
-     *   doc2: "mission impossible",
-     * });
-     *
-     * console.log(`Added ${result.added} entries`);
-     * if (result.errors.length) {
-     *   console.error(`Failed: ${result.errors.length} documents`);
-     * }
-     * ```
-     */
     addBatch(documents, strict = false) {
         const errors = [];
         let added = 0;
-        const entries = Array.isArray(documents)
-            ? documents
-            : Object.entries(documents);
-        for (const [docId, input] of entries) {
+        const entries = Array.isArray(documents) ? documents : Object.entries(documents);
+        for (const [docId, input] of entries){
             try {
                 added += this.add(input, docId, true);
-            }
-            catch (error) {
-                if (strict)
-                    throw error;
+            } catch (error) {
+                if (strict) throw error;
                 errors.push({
                     docId,
-                    error: error instanceof Error ? error : new Error(String(error)),
+                    error: error instanceof Error ? error : new Error(String(error))
                 });
             }
         }
-        return { added, errors };
+        return {
+            added,
+            errors
+        };
     }
-    /** Internal, low level search worker */
     #search(worker, query) {
         const { querySomeWordMinLength, lastQueryHistoryLength } = this.#options;
-        // save raw version asap
         this.#lastQuery.raw = query;
         query = normalize(query, this.#normalizeOptions);
         const words = this.toWords(query, true);
-        if (!words.some((w) => w.length >= querySomeWordMinLength)) {
+        if (!words.some((w)=>w.length >= querySomeWordMinLength)) {
             return [];
         }
-        // save last query meta
         this.#lastQuery.used = query;
-        this.#lastQuery.history =
-            lastQueryHistoryLength > 0
-                ? [...this.#lastQuery.history, query].slice(-1 * lastQueryHistoryLength)
-                : [];
-        // array of arrays of found ids for each word... we'll need to intersect for the final result
+        this.#lastQuery.history = lastQueryHistoryLength > 0 ? [
+            ...this.#lastQuery.history,
+            query
+        ].slice(-1 * lastQueryHistoryLength) : [];
         const _foundValues = [];
         const idToDistance = new Map();
-        // actual searching
-        for (const word of words) {
+        for (const word of words){
             const idDistMapOrArray = worker(word);
-            // "searchExact" return string[]
             if (Array.isArray(idDistMapOrArray)) {
                 _foundValues.push(idDistMapOrArray);
-            }
-            // "searchByPrefix" and "searchFuzzy" return Map<string, number>
-            // so we need to save the distances so we can sort the intersection later
-            else {
-                // hm... this is all good and working fine, the only thing is, that
-                // with n-grams, it stops making sense. Ideally the n-gram match should
-                // be excluded from the distance calc... but currently we can't
-                // distinguish between regular word match or n-gram match
+            } else {
                 const docIds = [];
-                Object.entries(idDistMapOrArray).forEach(([id, distance]) => {
+                Object.entries(idDistMapOrArray).forEach(([id, distance])=>{
                     if (idToDistance.has(id)) {
                         idToDistance.set(id, Math.min(distance, idToDistance.get(id)));
-                    }
-                    else {
+                    } else {
                         idToDistance.set(id, distance);
                     }
                     docIds.push(id);
@@ -308,108 +702,21 @@ export class Searchable {
             }
         }
         const results = intersect(..._foundValues);
-        const sortByDistanceAsc = (a, b) => idToDistance.get(a) - idToDistance.get(b);
+        const sortByDistanceAsc = (a, b)=>idToDistance.get(a) - idToDistance.get(b);
         return results.toSorted(sortByDistanceAsc);
     }
-    /**
-     * Searches the index for documents containing exact word matches from the query.
-     *
-     * This is the fastest search strategy. All query words must match exactly (after
-     * normalization). Results are returned in arbitrary order.
-     *
-     * @param query - The search query string
-     * @returns Array of docIds that match all query words exactly
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     * index.add("home office", "doc1");
-     * index.add("office space", "doc2");
-     *
-     * const results = index.searchExact("office");
-     * // returns: ["doc1", "doc2"]
-     * ```
-     */
     searchExact(query) {
-        return this.#search((word) => this.#index.searchExact(word), query);
+        return this.#search((word)=>this.#index.searchExact(word), query);
     }
-    /**
-     * Searches the index for documents containing words that start with the query words.
-     *
-     * This is the recommended strategy for autocomplete and typeahead features. Words in
-     * the index that begin with any query word will match. Results are sorted by Levenshtein
-     * distance (closest matches first).
-     *
-     * @param query - The search query string
-     * @returns Array of docIds sorted by match quality (best matches first)
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     * index.add("restaurant", "doc1");
-     * index.add("rest area", "doc2");
-     *
-     * const results = index.searchByPrefix("rest");
-     * // returns: ["doc1", "doc2"] (or ["doc2", "doc1"] depending on distance)
-     * ```
-     */
     searchByPrefix(query) {
-        return this.#search((word) => this.#index.searchByPrefix(word, true), query);
+        return this.#search((word)=>this.#index.searchByPrefix(word, true), query);
     }
-    /**
-     * Searches the index using fuzzy matching based on Levenshtein distance.
-     *
-     * This strategy is useful for handling typos and partial matches. Words within the
-     * specified edit distance will match. Results are sorted by distance (closest matches first).
-     *
-     * **Warning**: High maxDistance values combined with n-grams can produce too many matches
-     * and unexpected results. Use with caution and test with your data.
-     *
-     * @param query - The search query string
-     * @param maxDistance - Maximum Levenshtein distance to consider a match (default: 2)
-     * @returns Array of docIds sorted by match quality (best matches first)
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     * index.add("restaurant", "doc1");
-     *
-     * // Handles typos
-     * const results = index.searchFuzzy("resturant", 2);
-     * // returns: ["doc1"]
-     * ```
-     */
     searchFuzzy(query, maxDistance = 2) {
-        return this.#search((word) => this.#index.searchFuzzy(word, maxDistance, true), query);
+        return this.#search((word)=>this.#index.searchFuzzy(word, maxDistance, true), query);
     }
-    /**
-     * Main search API entry point with configurable strategy.
-     *
-     * This is the recommended method for most use cases. Choose between exact, prefix,
-     * or fuzzy search strategies based on your needs.
-     *
-     * @param query - The search query string
-     * @param strategy - Search strategy to use: "exact", "prefix", or "fuzzy" (default from options)
-     * @param options - Additional search options
-     * @param options.maxDistance - Maximum Levenshtein distance for fuzzy search (default: 2)
-     * @returns Array of docIds matching the query
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     * index.add("james bond", "007");
-     *
-     * // Use default strategy (prefix)
-     * const results = index.search("bond");
-     *
-     * // Specify strategy explicitly
-     * const exact = index.search("bond", "exact");
-     * const fuzzy = index.search("bnd", "fuzzy", { maxDistance: 1 });
-     * ```
-     */
     search(query, strategy, options) {
         strategy ??= this.#options.defaultSearchOptions.strategy ?? "prefix";
-        const { maxDistance = this.#options.defaultSearchOptions.maxDistance ?? 2, } = options || {};
+        const { maxDistance = this.#options.defaultSearchOptions.maxDistance ?? 2 } = options || {};
         if (strategy === "exact") {
             return this.searchExact(query);
         }
@@ -421,90 +728,28 @@ export class Searchable {
         }
         throw new TypeError(`Unknown search strategy "${strategy}"`);
     }
-    /**
-     * Exports the index internals to a JSON-serializable structure.
-     *
-     * Use this to persist the index to disk or transfer it over the network.
-     * The dumped data can be restored later using the restore() method.
-     *
-     * @param stringify - If true, returns JSON string. If false, returns plain object
-     * @returns Serialized index data as string or object
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     * index.add("james bond", "007");
-     *
-     * // Save to file
-     * const data = index.dump();
-     * await Deno.writeTextFile("index.json", data);
-     *
-     * // Or work with object
-     * const obj = index.dump(false);
-     * ```
-     */
     dump(stringify = true) {
         const dump = this.#index.dump();
         return stringify ? JSON.stringify(dump) : dump;
     }
-    /**
-     * Resets and restores the internal index state from a previously dumped structure.
-     *
-     * This completely replaces the current index with the provided data.
-     * The dump should come from the dump() method of a compatible Searchable instance.
-     *
-     * @param dump - Previously dumped index data (string or object)
-     * @returns True if restore was successful, false otherwise
-     *
-     * @example
-     * ```ts
-     * const index = new Searchable();
-     *
-     * // Load from file
-     * const data = await Deno.readTextFile("index.json");
-     * const success = index.restore(data);
-     *
-     * if (success) {
-     *   const results = index.search("bond");
-     * }
-     * ```
-     */
     restore(dump) {
         return this.#index.restore(dump);
     }
-    /**
-     * Creates a unified search interface over multiple Searchable instances.
-     *
-     * This is useful when you want to search across different indexes with different
-     * configurations (e.g., one for names with prefix search, one for descriptions with fuzzy).
-     * Results from all indexes are merged and deduplicated.
-     *
-     * @param indexes - Array of Searchable instances to merge
-     * @returns Object with a search method that queries all indexes
-     *
-     * @example
-     * ```ts
-     * const namesIndex = new Searchable({ defaultSearchOptions: { strategy: "prefix" } });
-     * const contentIndex = new Searchable({ defaultSearchOptions: { strategy: "fuzzy" } });
-     *
-     * namesIndex.add("John Lennon", "j");
-     * contentIndex.add("Imagine all the people", "j");
-     *
-     * const merged = Searchable.merge([namesIndex, contentIndex]);
-     * const results = merged.search("john");
-     * // returns: ["j"]
-     * ```
-     */
     static merge(indexes) {
         return {
-            search(query) {
+            search (query) {
                 let result = new Set();
-                for (const idx of indexes) {
+                for (const idx of indexes){
                     const partial = idx.search(query);
-                    result = result.union(new Set([...partial]));
+                    result = result.union(new Set([
+                        ...partial
+                    ]));
                 }
-                return [...result];
-            },
+                return [
+                    ...result
+                ];
+            }
         };
     }
 }
+export { Searchable as Searchable };

@@ -1,3 +1,11 @@
+/**
+ * Abstract base class defining the index interface.
+ *
+ * Concrete implementations (InvertedIndex, TrieIndex) must implement all abstract
+ * methods to provide word-to-document indexing and various search strategies.
+ *
+ * @abstract
+ */
 export abstract class Index {
 	/** Get the total number of unique words in the index. */
 	abstract get wordCount(): number;

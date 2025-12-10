@@ -37,7 +37,25 @@ class TrieNode {
 	}
 }
 
-/** Inverted index manager */
+/**
+ * Trie (prefix tree) based index implementation.
+ *
+ * Provides O(k) prefix search where k is the prefix length, making it ideal
+ * for autocomplete and typeahead features. Uses a tree structure where each
+ * node represents a character, with end-of-word markers storing document IDs.
+ *
+ * @example
+ * ```ts
+ * import { TrieIndex } from '@marianmeres/searchable';
+ *
+ * const index = new TrieIndex();
+ * index.addWord("hello", "doc1");
+ * index.addWord("help", "doc2");
+ *
+ * index.searchByPrefix("hel");
+ * // returns: ["doc1", "doc2"]
+ * ```
+ */
 export class TrieIndex extends Index {
 	#root: TrieNode;
 

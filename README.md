@@ -2,6 +2,7 @@
 
 [![NPM version](https://img.shields.io/npm/v/@marianmeres/searchable.svg)](https://www.npmjs.com/package/@marianmeres/searchable)
 [![JSR version](https://jsr.io/badges/@marianmeres/searchable)](https://jsr.io/@marianmeres/searchable)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Customizable fast text search index featuring:
 - Extremely fast "exact" word matching
@@ -79,6 +80,8 @@ assert(results.length === 1);
 assert(results[0] === '007');
 
 ```
+
+For complete API documentation including all methods and utility functions, see [API.md](API.md).
 
 ## Options
 

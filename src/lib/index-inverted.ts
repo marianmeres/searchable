@@ -1,7 +1,25 @@
 import { Index } from "./index-abstract.ts";
 import { levenshteinDistance } from "./levenshtein.ts";
 
-/** Inverted index manager */
+/**
+ * Hash map based inverted index implementation.
+ *
+ * Provides O(1) exact word lookups using a word-to-document mapping. This is the
+ * default and recommended index for most use cases, offering a good balance of
+ * speed and memory efficiency.
+ *
+ * @example
+ * ```ts
+ * import { InvertedIndex } from '@marianmeres/searchable';
+ *
+ * const index = new InvertedIndex();
+ * index.addWord("hello", "doc1");
+ * index.addWord("hello", "doc2");
+ *
+ * index.searchExact("hello");
+ * // returns: ["doc1", "doc2"]
+ * ```
+ */
 export class InvertedIndex extends Index {
 	// Main index: word -> Set of docIds
 	#wordToDocIds: Map<string, Set<string>> = new Map();

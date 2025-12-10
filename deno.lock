@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "jsr:@marianmeres/npmbuild@^1.7.3": "1.7.3",
     "jsr:@std/assert@^1.0.16": "1.0.16",
     "jsr:@std/fs@^1.0.20": "1.0.20",
     "jsr:@std/internal@^1.0.12": "1.0.12",
@@ -8,6 +9,13 @@
     "npm:publish@*": "0.6.0"
   },
   "jsr": {
+    "@marianmeres/npmbuild@1.7.3": {
+      "integrity": "f57fa455cddb908517bce3eda249a0accd3a787313017b46c42cc6dc5f19e780",
+      "dependencies": [
+        "jsr:@std/fs",
+        "jsr:@std/path"
+      ]
+    },
     "@std/assert@1.0.16": {
       "integrity": "6a7272ed1eaa77defe76e5ff63ca705d9c495077e2d5fd0126d2b53fc5bd6532",
       "dependencies": [
@@ -1185,6 +1193,7 @@
   },
   "workspace": {
     "dependencies": [
+      "jsr:@marianmeres/npmbuild@^1.7.3",
       "jsr:@std/assert@^1.0.16",
       "jsr:@std/fs@^1.0.20",
       "jsr:@std/path@^1.1.3"

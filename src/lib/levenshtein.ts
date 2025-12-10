@@ -1,8 +1,27 @@
 /**
- * Calculates the Levenshtein distance between source and target.
+ * Calculates the Levenshtein distance between two strings.
  *
- * The Levenshtein distance tells the minimum number of single-character changes
- * needed to transform one word into another.
+ * The Levenshtein distance represents the minimum number of single-character edits
+ * (insertions, deletions, or substitutions) needed to transform one string into another.
+ * Uses dynamic programming with O(m × n) time complexity where m and n are string lengths.
+ *
+ * @param source - The source string
+ * @param target - The target string to compare against
+ * @returns The edit distance (non-negative integer)
+ *
+ * @example
+ * ```ts
+ * import { levenshteinDistance } from '@marianmeres/searchable';
+ *
+ * levenshteinDistance("cat", "hat");
+ * // returns: 1 (one substitution: c → h)
+ *
+ * levenshteinDistance("hello", "helo");
+ * // returns: 1 (one deletion)
+ *
+ * levenshteinDistance("restaurant", "resturant");
+ * // returns: 2 (handles common typos)
+ * ```
  */
 export function levenshteinDistance(source: string, target: string): number {
 	// Create a matrix of size (source.length + 1) x (target.length + 1)

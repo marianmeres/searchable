@@ -9,8 +9,30 @@ const DEFAULT_OPTIONS: {
 };
 
 /**
- * Will create a normalized version of the input string based on options suitable for
- * further processing
+ * Creates a normalized version of the input string based on options.
+ *
+ * Applies trimming, optional lowercasing, and optional accent removal
+ * to prepare text for consistent indexing and searching.
+ *
+ * @param input - The string to normalize
+ * @param options - Normalization options
+ * @param options.caseSensitive - If false, converts to lowercase (default: false)
+ * @param options.accentSensitive - If false, removes diacritical marks (default: false)
+ * @returns Normalized string
+ *
+ * @example
+ * ```ts
+ * import { normalize } from '@marianmeres/searchable';
+ *
+ * normalize("  Café  ");
+ * // returns: "cafe"
+ *
+ * normalize("Café", { caseSensitive: true });
+ * // returns: "Cafe"
+ *
+ * normalize("Café", { accentSensitive: true });
+ * // returns: "café"
+ * ```
  */
 export function normalize(
 	input: string,

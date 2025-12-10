@@ -9,6 +9,6 @@
   "license": "MIT",
   "description": "",
   "dependencies": {
-    "@marianmeres/store": "^1.7.0"
+    "@marianmeres/store": "^1"
   }
 }

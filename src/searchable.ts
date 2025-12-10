@@ -28,13 +28,14 @@ export interface SearchableOptions {
 	nonWordCharWhitelist: string;
 	/** What n-grams size(s) to use? Set 0 (or empty array) to NOT use n-grams. Default is 0 */
 	ngramsSize: 0 | 3 | 4 | 5 | (3 | 4 | 5)[];
-	/**  */
+	/** Minimum length required for at least one query word to trigger search (default: 1) */
 	querySomeWordMinLength: number;
 	/** Default options used in `search` if none provided. */
 	defaultSearchOptions: Partial<{
 		strategy: "exact" | "prefix" | "fuzzy";
 		maxDistance: number;
 	}>;
+	/** Number of query strings to keep in lastQuery.history (default: 5) */
 	lastQueryHistoryLength: number;
 }
 
