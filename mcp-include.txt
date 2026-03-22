@@ -1,0 +1,1 @@
+Customizable fast text search index with exact, prefix, and fuzzy word matching. Great for filtering in-memory documents like autocomplete or typeahead, with results ranked by Levenshtein distance.
