@@ -14,3 +14,16 @@ Deno.test("unaccent works", () => {
 		"Vypata dcera grofa Maxwella s IQ nizsim ako kon nuti celad hryzt hrbu jablk"
 	);
 });
+
+Deno.test("unaccent folds letters NFD doesn't decompose", () => {
+	assertEquals(unaccent("straße"), "strasse");
+	assertEquals(unaccent("STRAẞE"), "STRASSE");
+	assertEquals(unaccent("København"), "Kobenhavn");
+	assertEquals(unaccent("Ångström"), "Angstrom");
+	assertEquals(unaccent("Encyclopædia"), "Encyclopaedia");
+	assertEquals(unaccent("cœur"), "coeur");
+	assertEquals(unaccent("łódź"), "lodz");
+	assertEquals(unaccent("Đặng"), "Dang");
+	assertEquals(unaccent("þór"), "thor");
+	assertEquals(unaccent("mıx"), "mix"); // Turkish dotless i
+});

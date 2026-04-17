@@ -1,24 +1,30 @@
-import type { Index } from "./lib/index-abstract.ts";
+import {
+	type DistanceFn,
+	type FuzzyOptions,
+	type Index,
+} from "./lib/index-abstract.ts";
 import { intersect } from "./lib/intersect.ts";
 import { createNgrams, InvertedIndex, TrieIndex } from "./lib/mod.ts";
 import { normalize } from "./lib/normalize.ts";
 import { tokenize } from "./lib/tokenize.ts";
 
-interface ParseQueryResult {
-	operators: null | Record<string, any>;
-	query: string;
-}
-
 /** Factory options */
 export interface SearchableOptions {
-	/** Should be case sensitive? (Default false)*/
+	/** Should be case sensitive? (Default false) */
 	caseSensitive: boolean;
 	/** Should be accent sensitive? (Default false) */
 	accentSensitive: boolean;
-	/** Function to determine whether ignore the provided word (and not use it in the index).*/
+	/** Function to determine whether to ignore the provided word (and not use it in the index).*/
 	isStopword: (word: string) => boolean;
-	/** Arbitrary word normalizer used just before adding to the index.
-	 * Eg for stemmer, lemmatizer, spell check, aliases, business variants... */
+	/** Arbitrary word normalizer applied to each tokenized word.
+	 *
+	 * Applied at BOTH index and query time (since v2.5.0 — prior versions applied
+	 * it at index time only, which silently broke stemmer / alias setups).
+	 *
+	 * Return a single string for 1:1 transforms (stemmer, lemmatizer, case/locale fold).
+	 * Return an array to expand one input word into multiple alternates (aliases,
+	 * business-term synonyms). At query time, expansions are OR'd within the group
+	 * (any alternate matches), while groups are AND'd across the full query. */
 	normalizeWord: (word: string) => string | string[];
 	/** Which underlying index implementation to use? Default "inverted" */
 	index: "inverted" | "trie";
@@ -34,6 +40,9 @@ export interface SearchableOptions {
 	defaultSearchOptions: Partial<{
 		strategy: "exact" | "prefix" | "fuzzy";
 		maxDistance: number;
+		limit: number;
+		offset: number;
+		distanceFn: DistanceFn;
 	}>;
 	/** Number of query strings to keep in lastQuery.history (default: 5) */
 	lastQueryHistoryLength: number;
@@ -41,12 +50,50 @@ export interface SearchableOptions {
 
 /** Last query meta info */
 export interface LastQuery {
-	/** history of the "used" queries */
+	/** history of the "used" queries (post-normalization; `rawHistory` has the raw input) */
 	history: string[];
+	/** raw user input for each entry in `history` (same order, same length) */
+	rawHistory: string[];
 	/** last raw query input (even empty string) */
 	raw: string | undefined;
 	/** last query truly used in search (value after querySomeWordMinLength applied) */
 	used: string | undefined;
+}
+
+/** Options accepted by `search` (and the strategy-specific variants that take options). */
+export interface SearchOptions {
+	/** Maximum Levenshtein distance for fuzzy search (default: 2). */
+	maxDistance?: number;
+	/** Return at most this many results. */
+	limit?: number;
+	/** Skip the first N results (applied before `limit`). */
+	offset?: number;
+	/** Override the distance function (default: Levenshtein). */
+	distanceFn?: DistanceFn;
+}
+
+/** Return shape of `Searchable.explainQuery`. Useful for debugging search behavior. */
+export interface QueryExplanation {
+	raw: string;
+	normalized: string;
+	tokens: string[];
+	afterStopwords: string[];
+	/** Groups of query terms after `normalizeWord` expansion. OR within a group, AND across. */
+	groups: string[][];
+	/** True when the query would actually invoke the index (post `querySomeWordMinLength`). */
+	wouldSearch: boolean;
+}
+
+/** Shape returned by `Searchable.merge`. */
+export interface MergedSearchable {
+	search: (query: string, options?: SearchOptions) => string[];
+	searchExact: (query: string, options?: SearchOptions) => string[];
+	searchByPrefix: (query: string, options?: SearchOptions) => string[];
+	searchFuzzy: (
+		query: string,
+		maxDistance?: number,
+		options?: SearchOptions
+	) => string[];
 }
 
 /**
@@ -73,8 +120,8 @@ export class Searchable {
 	#options: SearchableOptions = {
 		caseSensitive: false,
 		accentSensitive: false,
-		isStopword: (_w: string) => false, // no filter by default
-		normalizeWord: (word: string) => word, // noop by default
+		isStopword: (_w: string) => false,
+		normalizeWord: (word: string) => word,
 		index: "inverted",
 		nonWordCharWhitelist: "@-",
 		ngramsSize: 0,
@@ -83,16 +130,14 @@ export class Searchable {
 			strategy: "prefix",
 			maxDistance: 2,
 		},
-		// how many queries keep as history entries? Just a helper for UI (no direct usage)...
 		lastQueryHistoryLength: 5,
 	};
 
 	#index: Index;
 
-	// just saving some meta about last used query... may be useful in some UI cases
-	// (why not do it here when it is basically for free)
 	#lastQuery: LastQuery = {
 		history: [],
+		rawHistory: [],
 		raw: undefined,
 		used: undefined,
 	};
@@ -100,32 +145,37 @@ export class Searchable {
 	/**
 	 * Creates a new Searchable index instance.
 	 *
-	 * @param options - Configuration options for the index
-	 * @param options.caseSensitive - Should "Foo" and "foo" be distinct? (default: false)
-	 * @param options.accentSensitive - Should "cafe" and "café" be distinct? (default: false)
-	 * @param options.isStopword - Function to check if a word should be ignored (default: none)
-	 * @param options.normalizeWord - Custom normalizer for stemming, aliases, etc. (default: noop)
-	 * @param options.index - Which implementation to use: "inverted" or "trie" (default: "inverted")
-	 * @param options.nonWordCharWhitelist - Characters to include in words (default: "@-")
-	 * @param options.ngramsSize - N-gram sizes to generate, or 0 to disable (default: 0)
-	 * @param options.querySomeWordMinLength - Skip search if all query words are shorter (default: 1)
-	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable({
-	 *   caseSensitive: false,
-	 *   index: "inverted",
-	 *   ngramsSize: [3, 4],
-	 * });
-	 * ```
+	 * @param options - Configuration options for the index (see {@link SearchableOptions})
 	 */
 	constructor(options: Partial<SearchableOptions> = {}) {
-		this.#options = { ...this.#options, ...(options || {}) };
+		this.#options = {
+			...this.#options,
+			...(options || {}),
+			// nested object: defensive copy so external mutation doesn't leak in
+			defaultSearchOptions: {
+				...this.#options.defaultSearchOptions,
+				...(options?.defaultSearchOptions ?? {}),
+			},
+		};
 
 		this.#index =
 			this.#options.index === "inverted"
 				? new InvertedIndex()
 				: new TrieIndex();
+	}
+
+	/**
+	 * Create a Searchable from a previously-produced dump. The dump format is
+	 * index-agnostic, so you may pick a different `index` implementation at
+	 * restore time (e.g. migrate inverted ↔ trie).
+	 */
+	static fromDump(
+		dump: any,
+		options: Partial<SearchableOptions> = {}
+	): Searchable {
+		const idx = new Searchable(options);
+		idx.restore(dump);
+		return idx;
 	}
 
 	get #normalizeOptions() {
@@ -145,14 +195,29 @@ export class Searchable {
 		return this.#index.wordCount;
 	}
 
-	/** Will return last used query used on this instance (or undefined if none exist) */
-	get lastQuery(): LastQuery {
-		return this.#lastQuery;
+	/** Number of unique docIds in the index. */
+	get docIdCount(): number {
+		return this.#index.docIdCount;
 	}
 
-	#assertWordAndDocId(word: string, docId: string) {
-		if (!word || typeof word !== "string") {
-			throw new Error("Word must be a non-empty string");
+	/** Returns a shallow copy of the last-query meta (safe to inspect / store). */
+	get lastQuery(): LastQuery {
+		return {
+			history: [...this.#lastQuery.history],
+			rawHistory: [...this.#lastQuery.rawHistory],
+			raw: this.#lastQuery.raw,
+			used: this.#lastQuery.used,
+		};
+	}
+
+	/** Returns true if the docId exists in the index. */
+	hasDocId(docId: string): boolean {
+		return this.#index.hasDocId(docId);
+	}
+
+	#assertInputAndDocId(input: string, docId: string) {
+		if (!input || typeof input !== "string") {
+			throw new Error("Input must be a non-empty string");
 		}
 		if (!docId || typeof docId !== "string") {
 			throw new Error("DocId must be a non-empty string");
@@ -160,88 +225,103 @@ export class Searchable {
 	}
 
 	/**
-	 * Splits the input string into words respecting the `nonWordCharWhitelist` option.
+	 * Splits the input string into words.
 	 *
-	 * This method applies normalization, tokenization, stopword filtering, and custom
-	 * word normalization according to the configured options.
+	 * Applies normalization, tokenization, stopword filtering, and (when `isQuery`
+	 * is false) the custom `normalizeWord`.
 	 *
-	 * @param input - The string to tokenize
-	 * @param isQuery - Whether this is a search query (affects processing)
-	 * @returns Array of unique normalized words
+	 * **Note on `isQuery=true`:** this method returns a flat de-duplicated list,
+	 * which is a lossy view for queries whose `normalizeWord` returns arrays
+	 * (alias / synonym expansion). For query pipelines, prefer
+	 * {@link Searchable.toQueryGroups} which preserves the per-term groups used by
+	 * `#search` to produce correct OR-within-AND-across semantics.
+	 */
+	toWords(input: string, isQuery: boolean = false): string[] {
+		input = normalize(input, this.#normalizeOptions);
+		let words = tokenize(input, this.#options.nonWordCharWhitelist);
+		words = words.filter((w) => w && !this.#options.isStopword(w));
+
+		const expand = (w: string): string[] => {
+			const out = this.#options.normalizeWord(w);
+			return Array.isArray(out) ? out.filter(Boolean) : out ? [out] : [];
+		};
+
+		if (isQuery) {
+			// Preserve historical public shape (flat list) but DO apply normalizeWord.
+			// This fixes the prior bug where stemmer/alias normalizers never ran at
+			// query time; callers needing group-awareness should use toQueryGroups.
+			const out: string[] = [];
+			for (const w of words) {
+				for (const variant of expand(w)) {
+					const n = normalize(variant, this.#normalizeOptions);
+					if (n && !this.#options.isStopword(n)) out.push(n);
+				}
+			}
+			return [...new Set(out)];
+		}
+
+		// indexing path
+		const expanded: string[] = [];
+		for (const w of words) expanded.push(...expand(w));
+		const finalized = expanded
+			.map((w) => normalize(w, this.#normalizeOptions))
+			.filter((w) => w && !this.#options.isStopword(w));
+		return [...new Set(finalized)];
+	}
+
+	/**
+	 * Splits the input query into groups of alternate terms. Each group maps to
+	 * one original tokenized term + its `normalizeWord` expansion. Search
+	 * semantics are **OR within a group, AND across groups**.
 	 *
 	 * @example
 	 * ```ts
-	 * const index = new Searchable();
-	 * const words = index.toWords("Café-Restaurant in São Paulo");
-	 * // returns: ["cafe", "restaurant", "in", "sao", "paulo"]
+	 * // normalizeWord: colour → ["colour", "color"]
+	 * index.toQueryGroups("big colour test");
+	 * // [ ["big"], ["colour", "color"], ["test"] ]
 	 * ```
 	 */
-	toWords(input: string, isQuery: boolean = false): string[] {
-		// 1. normalize
-		input = normalize(input, this.#normalizeOptions);
+	toQueryGroups(input: string): string[][] {
+		const norm = normalize(input, this.#normalizeOptions);
+		const tokens = tokenize(norm, this.#options.nonWordCharWhitelist).filter(
+			(w) => w && !this.#options.isStopword(w)
+		);
 
-		// 2. tokenize to words
-		let words = tokenize(input, this.#options.nonWordCharWhitelist);
-
-		// first round stopwords filter
-		words = words.filter((w) => w && !this.#options.isStopword(w));
-
-		// when adding to index, apply few more steps...
-		if (!isQuery) {
-			// normalizeWord can return array of new words
-			words = words.reduce((m, word) => {
-				const w = this.#options.normalizeWord(word);
-				if (w && Array.isArray(w)) {
-					m = [...m, ...w];
-				} else if (w) {
-					m.push(w as any);
-				}
-				return m;
-			}, [] as string[]);
-
-			// finalize... since normalizeWordabove may have changed words, must normalize again
-			words = words
-				.map((w) => {
-					w = normalize(w, this.#normalizeOptions);
-					if (w && this.#options.isStopword(w)) w = "";
-					return w;
-				})
-				.filter(Boolean);
+		const groups: string[][] = [];
+		for (const token of tokens) {
+			const expanded = this.#options.normalizeWord(token);
+			const variants = Array.isArray(expanded)
+				? expanded.filter(Boolean)
+				: expanded
+					? [expanded]
+					: [];
+			const finalized = variants
+				.map((w) => normalize(w, this.#normalizeOptions))
+				.filter((w) => w && !this.#options.isStopword(w));
+			const group = [...new Set(finalized)];
+			if (group.length) groups.push(group);
 		}
-
-		// unique
-		return Array.from(new Set(words));
+		return groups;
 	}
 
 	/**
 	 * Adds a searchable text string to the index associated with a document ID.
-	 *
-	 * The input string will be normalized, tokenized, and processed according to
-	 * the configured options (case sensitivity, stop words, normalizers, n-grams, etc).
-	 * Each unique word extracted from the input is indexed with the provided docId.
 	 *
 	 * @param input - The searchable text to index
 	 * @param docId - Unique identifier for the document
 	 * @param strict - If true, throws on invalid input. If false, silently returns 0
 	 * @returns Number of new word-docId pairs added to the index
 	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable();
-	 * const added = index.add("james bond", "007");
-	 * console.log(`Added ${added} word-document pairs`);
-	 * ```
-	 *
 	 * @throws {Error} If input or docId is invalid and strict is true
 	 */
 	add(input: string, docId: string, strict = true): number {
 		try {
-			this.#assertWordAndDocId(input, docId);
+			this.#assertInputAndDocId(input, docId);
 		} catch (e) {
 			if (strict) throw e;
 			return 0;
 		}
-		//
+
 		const words = this.toWords(input, false);
 		if (!words.length) return 0;
 
@@ -249,16 +329,13 @@ export class Searchable {
 		for (const word of words) {
 			added += Number(this.#index.addWord(word, docId));
 
-			// should we use n-grams?
 			if (this.#options.ngramsSize) {
 				const ngramsSizes = Array.isArray(this.#options.ngramsSize)
 					? this.#options.ngramsSize
 					: [this.#options.ngramsSize];
 				for (const ngramsSize of ngramsSizes) {
 					if (ngramsSize > 0) {
-						const ngs = createNgrams(word, ngramsSize, {
-							padChar: "", // no padding
-						});
+						const ngs = createNgrams(word, ngramsSize, { padChar: "" });
 						for (const ng of ngs) {
 							added += Number(this.#index.addWord(ng, docId));
 						}
@@ -271,36 +348,28 @@ export class Searchable {
 	}
 
 	/**
-	 * Efficiently adds multiple documents to the index in batch.
+	 * Replaces all indexed content for a docId with the new input.
+	 * Equivalent to `removeDocId(docId)` then `add(input, docId)` — safer since
+	 * it guarantees old words are cleared even when the caller forgets.
 	 *
-	 * This is more convenient than calling add() in a loop for initial data loading.
-	 * Accepts either an array of [docId, text] tuples or a Record<docId, text> object.
+	 * @returns Number of new word-docId pairs added after the replacement
+	 */
+	replace(docId: string, input: string, strict = true): number {
+		this.#index.removeDocId(docId);
+		return this.add(input, docId, strict);
+	}
+
+	/** Remove all indexed content for the given docId. */
+	removeDocId(docId: string): number {
+		return this.#index.removeDocId(docId);
+	}
+
+	/**
+	 * Efficiently adds multiple documents to the index in batch.
 	 *
 	 * @param documents - Array of [docId, text] tuples or Record<docId, text>
 	 * @param strict - If true, stops on first error. If false, continues and collects errors
 	 * @returns Object with count of added entries and any errors encountered
-	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable();
-	 *
-	 * // Array format
-	 * const result = index.addBatch([
-	 *   ["doc1", "james bond"],
-	 *   ["doc2", "mission impossible"],
-	 * ]);
-	 *
-	 * // Object format
-	 * index.addBatch({
-	 *   doc1: "james bond",
-	 *   doc2: "mission impossible",
-	 * });
-	 *
-	 * console.log(`Added ${result.added} entries`);
-	 * if (result.errors.length) {
-	 *   console.error(`Failed: ${result.errors.length} documents`);
-	 * }
-	 * ```
 	 */
 	addBatch(
 		documents: [string, string][] | Record<string, string>,
@@ -328,245 +397,195 @@ export class Searchable {
 		return { added, errors };
 	}
 
-	/** Internal, low level search worker */
-	#search(
+	/** Internal worker signature — either an array of ids, or a distance-keyed map. */
+	#runSearch(
 		worker: (word: string) => string[] | Record<string, number>,
 		query: string
-	) {
+	): string[] {
 		const { querySomeWordMinLength, lastQueryHistoryLength } = this.#options;
-		// save raw version asap
-		this.#lastQuery.raw = query;
 
-		query = normalize(query, this.#normalizeOptions);
-		const words = this.toWords(query, true);
+		// save raw first (pre-normalization)
+		const rawInput = query;
+		this.#lastQuery.raw = rawInput;
 
-		if (!words.some((w) => w.length >= querySomeWordMinLength)) {
+		const groups = this.toQueryGroups(query);
+		const normalizedQuery = normalize(query, this.#normalizeOptions);
+
+		if (
+			!groups.some((g) =>
+				g.some((w) => w.length >= querySomeWordMinLength)
+			)
+		) {
 			return [];
 		}
 
-		// save last query meta
-		this.#lastQuery.used = query;
-		this.#lastQuery.history =
-			lastQueryHistoryLength > 0
-				? [...this.#lastQuery.history, query].slice(-1 * lastQueryHistoryLength)
-				: [];
-
-		// array of arrays of found ids for each word... we'll need to intersect for the final result
-		const _foundValues: string[][] = [];
-		const idToDistance = new Map<string, number>();
-
-		// actual searching
-		for (const word of words) {
-			const idDistMapOrArray = worker(word);
-
-			// "searchExact" return string[]
-			if (Array.isArray(idDistMapOrArray)) {
-				_foundValues.push(idDistMapOrArray);
-			}
-			// "searchByPrefix" and "searchFuzzy" return Map<string, number>
-			// so we need to save the distances so we can sort the intersection later
-			else {
-				// hm... this is all good and working fine, the only thing is, that
-				// with n-grams, it stops making sense. Ideally the n-gram match should
-				// be excluded from the distance calc... but currently we can't
-				// distinguish between regular word match or n-gram match
-				const docIds: string[] = [];
-				Object.entries(idDistMapOrArray).forEach(([id, distance]) => {
-					if (idToDistance.has(id)) {
-						idToDistance.set(id, Math.min(distance, idToDistance.get(id)!));
-					} else {
-						idToDistance.set(id, distance);
-					}
-					docIds.push(id);
-				});
-				_foundValues.push(docIds);
-			}
+		this.#lastQuery.used = normalizedQuery;
+		if (lastQueryHistoryLength > 0) {
+			this.#lastQuery.history = [
+				...this.#lastQuery.history,
+				normalizedQuery,
+			].slice(-lastQueryHistoryLength);
+			this.#lastQuery.rawHistory = [
+				...this.#lastQuery.rawHistory,
+				rawInput,
+			].slice(-lastQueryHistoryLength);
+		} else {
+			this.#lastQuery.history = [];
+			this.#lastQuery.rawHistory = [];
 		}
 
-		const results = intersect(..._foundValues);
+		// Per-group: union results of every variant (OR within group).
+		// Across groups: intersect (AND across).
+		const perGroupIds: string[][] = [];
+		const idToDistance = new Map<string, number>();
 
-		const sortByDistanceAsc = (a: string, b: string) =>
-			idToDistance.get(a)! - idToDistance.get(b)!;
+		for (const group of groups) {
+			const unioned = new Set<string>();
+			for (const variant of group) {
+				const res = worker(variant);
+				if (Array.isArray(res)) {
+					for (const id of res) unioned.add(id);
+				} else {
+					for (const [id, distance] of Object.entries(res)) {
+						unioned.add(id);
+						const prev = idToDistance.get(id);
+						if (prev === undefined || distance < prev) {
+							idToDistance.set(id, distance);
+						}
+					}
+				}
+			}
+			perGroupIds.push([...unioned]);
+		}
 
-		return results.toSorted(sortByDistanceAsc);
+		const results = intersect(...perGroupIds);
+
+		// Sort by best distance we observed (min across all matching variants).
+		// Exact search has no distances; those ids stay in insertion order.
+		return results.sort((a, b) => {
+			const da = idToDistance.get(a);
+			const db = idToDistance.get(b);
+			if (da === undefined && db === undefined) return 0;
+			if (da === undefined) return 1;
+			if (db === undefined) return -1;
+			return da - db;
+		});
 	}
 
-	/**
-	 * Searches the index for documents containing exact word matches from the query.
-	 *
-	 * This is the fastest search strategy. All query words must match exactly (after
-	 * normalization). Results are returned in arbitrary order.
-	 *
-	 * @param query - The search query string
-	 * @returns Array of docIds that match all query words exactly
-	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable();
-	 * index.add("home office", "doc1");
-	 * index.add("office space", "doc2");
-	 *
-	 * const results = index.searchExact("office");
-	 * // returns: ["doc1", "doc2"]
-	 * ```
-	 */
-	searchExact(query: string): string[] {
-		return this.#search((word: string) => this.#index.searchExact(word), query);
+	#applyWindow(ids: string[], options?: SearchOptions): string[] {
+		const offset = Math.max(0, options?.offset ?? 0);
+		const limit = options?.limit;
+		if (!offset && (limit === undefined || limit < 0)) return ids;
+		const end = limit === undefined ? undefined : offset + Math.max(0, limit);
+		return ids.slice(offset, end);
 	}
 
-	/**
-	 * Searches the index for documents containing words that start with the query words.
-	 *
-	 * This is the recommended strategy for autocomplete and typeahead features. Words in
-	 * the index that begin with any query word will match. Results are sorted by Levenshtein
-	 * distance (closest matches first).
-	 *
-	 * @param query - The search query string
-	 * @returns Array of docIds sorted by match quality (best matches first)
-	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable();
-	 * index.add("restaurant", "doc1");
-	 * index.add("rest area", "doc2");
-	 *
-	 * const results = index.searchByPrefix("rest");
-	 * // returns: ["doc1", "doc2"] (or ["doc2", "doc1"] depending on distance)
-	 * ```
-	 */
-	searchByPrefix(query: string): string[] {
-		return this.#search(
-			(word: string) => this.#index.searchByPrefix(word, true),
+	/** Searches the index for documents containing exact word matches. */
+	searchExact(query: string, options?: SearchOptions): string[] {
+		const ids = this.#runSearch(
+			(word) => this.#index.searchExact(word),
 			query
 		);
+		return this.#applyWindow(ids, options);
+	}
+
+	/**
+	 * Searches the index for words that start with any query word.
+	 * Results are sorted by Levenshtein distance (closest first).
+	 */
+	searchByPrefix(query: string, options?: SearchOptions): string[] {
+		const ids = this.#runSearch(
+			(word) => this.#index.searchByPrefix(word, true),
+			query
+		);
+		return this.#applyWindow(ids, options);
 	}
 
 	/**
 	 * Searches the index using fuzzy matching based on Levenshtein distance.
 	 *
-	 * This strategy is useful for handling typos and partial matches. Words within the
-	 * specified edit distance will match. Results are sorted by distance (closest matches first).
-	 *
-	 * **Warning**: High maxDistance values combined with n-grams can produce too many matches
-	 * and unexpected results. Use with caution and test with your data.
+	 * Accepts `options.distanceFn` to replace the default Levenshtein with any
+	 * custom distance function (e.g. Damerau-Levenshtein, Jaro-Winkler, phonetic).
 	 *
 	 * @param query - The search query string
-	 * @param maxDistance - Maximum Levenshtein distance to consider a match (default: 2)
-	 * @returns Array of docIds sorted by match quality (best matches first)
-	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable();
-	 * index.add("restaurant", "doc1");
-	 *
-	 * // Handles typos
-	 * const results = index.searchFuzzy("resturant", 2);
-	 * // returns: ["doc1"]
-	 * ```
+	 * @param maxDistance - Maximum distance to consider a match (default: 2)
+	 * @param options - Optional pagination / distance-function overrides
 	 */
-	searchFuzzy(query: string, maxDistance: number = 2): string[] {
-		return this.#search(
-			(word: string) => this.#index.searchFuzzy(word, maxDistance, true),
+	searchFuzzy(
+		query: string,
+		maxDistance: number = 2,
+		options?: SearchOptions
+	): string[] {
+		const fuzzyOpts: FuzzyOptions | undefined =
+			options?.distanceFn ? { distanceFn: options.distanceFn } : undefined;
+
+		const ids = this.#runSearch(
+			(word) =>
+				fuzzyOpts
+					? this.#index.searchFuzzy(word, maxDistance, true, fuzzyOpts)
+					: this.#index.searchFuzzy(word, maxDistance, true),
 			query
 		);
+		return this.#applyWindow(ids, options);
 	}
 
-	/**
-	 * Main search API entry point with configurable strategy.
-	 *
-	 * This is the recommended method for most use cases. Choose between exact, prefix,
-	 * or fuzzy search strategies based on your needs.
-	 *
-	 * @param query - The search query string
-	 * @param strategy - Search strategy to use: "exact", "prefix", or "fuzzy" (default from options)
-	 * @param options - Additional search options
-	 * @param options.maxDistance - Maximum Levenshtein distance for fuzzy search (default: 2)
-	 * @returns Array of docIds matching the query
-	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable();
-	 * index.add("james bond", "007");
-	 *
-	 * // Use default strategy (prefix)
-	 * const results = index.search("bond");
-	 *
-	 * // Specify strategy explicitly
-	 * const exact = index.search("bond", "exact");
-	 * const fuzzy = index.search("bnd", "fuzzy", { maxDistance: 1 });
-	 * ```
-	 */
+	/** Main search API — picks a strategy then runs it. */
 	search(
 		query: string,
 		strategy?: "exact" | "prefix" | "fuzzy",
-		options?: Partial<{ maxDistance: number }>
+		options?: SearchOptions
 	): string[] {
 		strategy ??= this.#options.defaultSearchOptions.strategy ?? "prefix";
-		const {
-			maxDistance = this.#options.defaultSearchOptions.maxDistance ?? 2,
-		} = options || {};
+		const maxDistance =
+			options?.maxDistance ??
+			this.#options.defaultSearchOptions.maxDistance ??
+			2;
+		const distanceFn =
+			options?.distanceFn ?? this.#options.defaultSearchOptions.distanceFn;
 
-		if (strategy === "exact") {
-			return this.searchExact(query);
-		}
-		if (strategy === "prefix") {
-			return this.searchByPrefix(query);
-		}
+		const effective: SearchOptions = {
+			maxDistance,
+			limit: options?.limit ?? this.#options.defaultSearchOptions.limit,
+			offset: options?.offset ?? this.#options.defaultSearchOptions.offset,
+			distanceFn,
+		};
+
+		if (strategy === "exact") return this.searchExact(query, effective);
+		if (strategy === "prefix") return this.searchByPrefix(query, effective);
 		if (strategy === "fuzzy") {
-			return this.searchFuzzy(query, maxDistance);
+			return this.searchFuzzy(query, maxDistance, effective);
 		}
 		throw new TypeError(`Unknown search strategy "${strategy}"`);
 	}
 
 	/**
-	 * Exports the index internals to a JSON-serializable structure.
-	 *
-	 * Use this to persist the index to disk or transfer it over the network.
-	 * The dumped data can be restored later using the restore() method.
-	 *
-	 * @param stringify - If true, returns JSON string. If false, returns plain object
-	 * @returns Serialized index data as string or object
-	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable();
-	 * index.add("james bond", "007");
-	 *
-	 * // Save to file
-	 * const data = index.dump();
-	 * await Deno.writeTextFile("index.json", data);
-	 *
-	 * // Or work with object
-	 * const obj = index.dump(false);
-	 * ```
+	 * Returns a step-by-step view of what the query pipeline produces — useful
+	 * for debugging "why didn't this match?" scenarios.
+	 */
+	explainQuery(query: string): QueryExplanation {
+		const raw = query;
+		const normalized = normalize(query, this.#normalizeOptions);
+		const tokens = tokenize(normalized, this.#options.nonWordCharWhitelist);
+		const afterStopwords = tokens.filter(
+			(w) => w && !this.#options.isStopword(w)
+		);
+		const groups = this.toQueryGroups(query);
+		const wouldSearch = groups.some((g) =>
+			g.some((w) => w.length >= this.#options.querySomeWordMinLength)
+		);
+		return { raw, normalized, tokens, afterStopwords, groups, wouldSearch };
+	}
+
+	/**
+	 * Exports the index to a JSON-serializable structure. Pair with
+	 * {@link Searchable.fromDump} to hydrate back into a Searchable.
 	 */
 	dump(stringify = true): string | Record<string, any> {
 		const dump = this.#index.dump();
 		return stringify ? JSON.stringify(dump) : dump;
 	}
 
-	/**
-	 * Resets and restores the internal index state from a previously dumped structure.
-	 *
-	 * This completely replaces the current index with the provided data.
-	 * The dump should come from the dump() method of a compatible Searchable instance.
-	 *
-	 * @param dump - Previously dumped index data (string or object)
-	 * @returns True if restore was successful, false otherwise
-	 *
-	 * @example
-	 * ```ts
-	 * const index = new Searchable();
-	 *
-	 * // Load from file
-	 * const data = await Deno.readTextFile("index.json");
-	 * const success = index.restore(data);
-	 *
-	 * if (success) {
-	 *   const results = index.search("bond");
-	 * }
-	 * ```
-	 */
+	/** Resets and restores the internal index state from a previous `dump`. */
 	restore(dump: any): boolean {
 		return this.#index.restore(dump);
 	}
@@ -574,35 +593,28 @@ export class Searchable {
 	/**
 	 * Creates a unified search interface over multiple Searchable instances.
 	 *
-	 * This is useful when you want to search across different indexes with different
-	 * configurations (e.g., one for names with prefix search, one for descriptions with fuzzy).
-	 * Results from all indexes are merged and deduplicated.
-	 *
-	 * @param indexes - Array of Searchable instances to merge
-	 * @returns Object with a search method that queries all indexes
-	 *
-	 * @example
-	 * ```ts
-	 * const namesIndex = new Searchable({ defaultSearchOptions: { strategy: "prefix" } });
-	 * const contentIndex = new Searchable({ defaultSearchOptions: { strategy: "fuzzy" } });
-	 *
-	 * namesIndex.add("John Lennon", "j");
-	 * contentIndex.add("Imagine all the people", "j");
-	 *
-	 * const merged = Searchable.merge([namesIndex, contentIndex]);
-	 * const results = merged.search("john");
-	 * // returns: ["j"]
-	 * ```
+	 * Results are the deduplicated union of each instance's matches. Strategy
+	 * and options (when provided) are forwarded to every child; when not provided,
+	 * each child uses its own configured defaults.
 	 */
-	static merge(indexes: Searchable[]): { search: (query: string) => string[] } {
+	static merge(indexes: Searchable[]): MergedSearchable {
+		const union = (getter: (idx: Searchable) => string[]): string[] => {
+			const out = new Set<string>();
+			for (const idx of indexes) for (const id of getter(idx)) out.add(id);
+			return [...out];
+		};
 		return {
-			search(query: string) {
-				let result = new Set<string>();
-				for (const idx of indexes) {
-					const partial = idx.search(query);
-					result = result.union(new Set([...partial]));
-				}
-				return [...result];
+			search(query, options) {
+				return union((idx) => idx.search(query, undefined, options));
+			},
+			searchExact(query, options) {
+				return union((idx) => idx.searchExact(query, options));
+			},
+			searchByPrefix(query, options) {
+				return union((idx) => idx.searchByPrefix(query, options));
+			},
+			searchFuzzy(query, maxDistance, options) {
+				return union((idx) => idx.searchFuzzy(query, maxDistance, options));
 			},
 		};
 	}

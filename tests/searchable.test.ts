@@ -263,6 +263,7 @@ Deno.test("merged works", () => {
 	//
 	assertEquals(prefix.lastQuery, {
 		history: ["@beatles.com", "p_a_u+"],
+		rawHistory: ["@beatles.com", "p_a_u+"],
 		raw: "p_a_u+",
 		used: "p_a_u+",
 	});
@@ -271,6 +272,7 @@ Deno.test("merged works", () => {
 	fuzzy.search("");
 	assertEquals(fuzzy.lastQuery, {
 		history: ["john", "@beatles.com", "p_a_u+"], // longer history than prefix
+		rawHistory: ["john", "@beatles.com", "p_a_u+"],
 		raw: "", // last raw
 		used: "p_a_u+",
 	});

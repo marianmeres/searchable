@@ -4,19 +4,18 @@ import { movies } from "./movies.js";
 /**
  * Bench observations (see results below):
  *
- * - `searchExact` is extremely and equally fast (within µs) for both "inverted" and "trie"
+ * - `searchExact` is within the same order of magnitude for both indexes.
  *
- * - "inverted" is slightly less performant vs "trie" for `searchByPrefix`
- *   BUT it is the opposite for `searchFuzzy`. In the real-wold, both are fast
- *   enough (still within µs for prefix, but within ms for fuzzy) and the
- *   difference would be (outside of bench) unnoticeable.
+ * - `searchByPrefix` is ~2× faster on the trie (benefits directly from the
+ *   prefix-tree structure).
  *
- * - "searchFuzzy" is (obviously) significantly slowest (well within ms) from the rest
+ * - `searchFuzzy` on the trie walks the trie itself with a rolling Levenshtein
+ *   row and prunes subtrees whose row minimum exceeds `maxDistance`. The
+ *   inverted index has to scan every indexed word linearly. In practice the
+ *   trie is substantially faster for fuzzy on non-trivial vocabularies.
  *
- * VERDICT: seems like "inverted" is the better general pick due to the better searchFuzzy
- * performance. If not using fuzzy, both are (almost) equally fast (searchByPrefix is
- * only very slightly better in trie). "Inverted" has also significantly easier
- * implementation.
+ * VERDICT: "trie" is the better general pick since v2.5.0. Inverted remains
+ * simpler to reason about and still a fine default for small indexes.
  */
 
 // const map: any = {};
@@ -104,14 +103,14 @@ Deno.bench({
 /*
 $ deno bench bench/bench.ts
     CPU | Apple M2
-Runtime | Deno 2.2.6 (aarch64-apple-darwin)
+Runtime | Deno 2.7.12 (aarch64-apple-darwin)
 
-benchmark         time/iter (avg)        iter/s      (min … max)           p75      p99     p995
------------------ ----------------------------- --------------------- --------------------------
-trie exact                16.7 µs        59,740 (  2.8 µs …   2.3 ms)  26.3 µs  32.8 µs  35.3 µs
-inverted exact            16.4 µs        60,990 (  2.6 µs … 825.3 µs)  25.9 µs  32.5 µs  35.5 µs
-trie prefix              296.9 µs         3,368 ( 28.4 µs … 968.1 µs) 548.5 µs 704.5 µs 725.9 µs
-inverted prefix          620.3 µs         1,612 (334.0 µs …   1.7 ms) 762.6 µs   1.2 ms   1.2 ms
-trie fuzzy                68.8 ms          14.5 ( 35.2 ms …  98.8 ms)  76.6 ms  98.8 ms  98.8 ms
-inverted fuzzy            17.7 ms          56.6 (  8.3 ms …  22.7 ms)  22.1 ms  22.7 ms  22.7 ms
+benchmark         time/iter (avg)       iter/s
+----------------- ------------------------------
+trie exact               144.4 µs        6,926
+inverted exact           402.3 µs        2,486
+trie prefix              765.5 µs        1,306
+inverted prefix            1.9 ms        529
+trie fuzzy                 3.4 ms        294   (was 68.8 ms pre-v2.5.0)
+inverted fuzzy            23.1 ms        43.3
 */

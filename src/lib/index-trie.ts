@@ -1,8 +1,10 @@
-import { Index } from "./index-abstract.ts";
+import { Index, type DistanceFn, type FuzzyOptions } from "./index-abstract.ts";
 import { levenshteinDistance } from "./levenshtein.ts";
 
+const defaultDistanceFn: DistanceFn = (a, b) => levenshteinDistance(a, b);
+
 /**
- * TrieNode class represents a node in the Trie data structure
+ * TrieNode class represents a node in the Trie data structure.
  */
 class TrieNode {
 	constructor(
@@ -14,7 +16,6 @@ class TrieNode {
 		public docIds: Set<string> = new Set<string>()
 	) {}
 
-	// for debug
 	toJSON(): Record<string, any> {
 		return {
 			children: Object.fromEntries(this.children.entries()),
@@ -23,7 +24,6 @@ class TrieNode {
 		};
 	}
 
-	/** Debug helper */
 	__toCharTrie(
 		_tree: Record<string, any> = {},
 		_node?: TrieNode
@@ -44,6 +44,10 @@ class TrieNode {
  * for autocomplete and typeahead features. Uses a tree structure where each
  * node represents a character, with end-of-word markers storing document IDs.
  *
+ * Fuzzy search traverses the trie itself with a rolling edit-distance row and
+ * prunes subtrees whose row minimum exceeds `maxDistance` — substantially
+ * faster than a linear scan for large vocabularies with small `maxDistance`.
+ *
  * @example
  * ```ts
  * import { TrieIndex } from '@marianmeres/searchable';
@@ -62,6 +66,9 @@ export class TrieIndex extends Index {
 	// helper index for fast lookup by docId
 	#docIdToWords: Map<string, Set<string>> = new Map();
 
+	// unique-word counter maintained incrementally (add/remove)
+	#wordCount: number = 0;
+
 	constructor() {
 		super();
 		this.#root = new TrieNode();
@@ -73,34 +80,27 @@ export class TrieIndex extends Index {
 
 	/** Get the total number of unique words in the index. */
 	get wordCount(): number {
-		// return this.#collectAllWords().size;
-		// this should be cheaper/faster I would guess
-		const words = new Set();
-		this.#docIdToWords.values().forEach((_words) => {
-			_words.forEach((w) => words.add(w));
-		});
-		return words.size;
+		return this.#wordCount;
 	}
 
-	/**
-	 * Get the total number of unique docIds in the index.
-	 */
+	/** Get the total number of unique docIds in the index. */
 	get docIdCount(): number {
 		return this.#docIdToWords.size;
 	}
 
-	/**
-	 * Get all the words in the index.
-	 */
+	/** Get all the words in the index. */
 	getAllWords(): string[] {
 		return [...this.#collectAllWords().keys()];
 	}
 
-	/**
-	 * Get all the docIds in the index.
-	 */
+	/** Get all the docIds in the index. */
 	getAllDocIds(): string[] {
 		return [...this.#docIdToWords.keys()];
+	}
+
+	/** Returns true if the docId exists in the index. */
+	hasDocId(docId: string): boolean {
+		return this.#docIdToWords.has(docId);
 	}
 
 	#assertWordAndDocId(word: string, docId: string) {
@@ -119,7 +119,6 @@ export class TrieIndex extends Index {
 	addWord(word: string, docId: string): boolean {
 		this.#assertWordAndDocId(word, docId);
 
-		// Add word to the trie
 		let currentNode = this.#root;
 		for (const char of word) {
 			if (!currentNode.children.has(char)) {
@@ -128,12 +127,13 @@ export class TrieIndex extends Index {
 			currentNode = currentNode.children.get(char)!;
 		}
 
-		// Mark as end of word and add docId
+		// new unique word if this node was not EOW yet
+		if (!currentNode.isEOW) this.#wordCount++;
 		currentNode.isEOW = true;
+
 		const isNewEntry = !currentNode.docIds.has(docId);
 		currentNode.docIds.add(docId);
 
-		// Update document-word mapping
 		if (!this.#docIdToWords.has(docId)) {
 			this.#docIdToWords.set(docId, new Set());
 		}
@@ -142,18 +142,14 @@ export class TrieIndex extends Index {
 		return isNewEntry;
 	}
 
-	/**
-	 * Removes a word and associated docId from the index
-	 */
+	/** Removes a word + docId pair from the index. */
 	removeWord(word: string, docId: string): boolean {
 		this.#assertWordAndDocId(word, docId);
 
-		const result = this.#removeWordFromTrie(this.#root, word, 0, docId);
+		const result = this.#removeWordFromTrie(this.#root, [...word], 0, docId);
 
-		// Update document-word mapping
 		if (result && this.#docIdToWords.has(docId)) {
 			this.#docIdToWords.get(docId)!.delete(word);
-			// Remove document from map if it has no more words
 			if (this.#docIdToWords.get(docId)!.size === 0) {
 				this.#docIdToWords.delete(docId);
 			}
@@ -162,19 +158,15 @@ export class TrieIndex extends Index {
 		return result;
 	}
 
-	/**
-	 * Removes all entries for a given docId
-	 */
+	/** Removes all entries for a given docId. */
 	removeDocId(docId: string): number {
-		if (!this.#docIdToWords.has(docId)) {
-			return 0;
-		}
+		if (!this.#docIdToWords.has(docId)) return 0;
 
 		const words = [...this.#docIdToWords.get(docId)!];
 		let removedCount = 0;
 
 		for (const word of words) {
-			if (this.#removeWordFromTrie(this.#root, word, 0, docId)) {
+			if (this.#removeWordFromTrie(this.#root, [...word], 0, docId)) {
 				removedCount++;
 			}
 		}
@@ -183,31 +175,18 @@ export class TrieIndex extends Index {
 		return removedCount;
 	}
 
-	/**
-	 * Search for documents containing the exact word.
-	 */
+	/** Search for documents containing the exact word. */
 	searchExact(word: string): string[] {
-		// const result = this.#wordToDocIds.get(word);
-		// return result ? [...new Set(result)] : [];
-
 		let currentNode = this.#root;
 		for (const char of word) {
-			if (!currentNode.children.has(char)) {
-				return []; // Word not found
-			}
+			if (!currentNode.children.has(char)) return [];
 			currentNode = currentNode.children.get(char)!;
 		}
-
-		if (!currentNode.isEOW) {
-			return []; // Word not found
-		}
-
-		return [...new Set(currentNode.docIds)];
+		if (!currentNode.isEOW) return [];
+		return [...currentNode.docIds];
 	}
 
-	/**
-	 * Search for documents containing words with the given prefix.
-	 */
+	/** Search for documents containing words with the given prefix. */
 	searchByPrefix(prefix: string): string[];
 	searchByPrefix(
 		prefix: string,
@@ -218,56 +197,35 @@ export class TrieIndex extends Index {
 		returnWithDistance: boolean = false
 	): string[] | Record<string, number> {
 		let currentNode = this.#root;
-		const resultsMap = new Map<string, Set<string>>();
-		const results = new Set<string>();
-		const idToDistance = new Map<string, number>();
-
-		// Traverse to the node representing the prefix
 		for (const char of prefix) {
-			if (!currentNode.children.has(char)) {
-				return []; // Prefix not found
-			}
+			if (!currentNode.children.has(char)) return [];
 			currentNode = currentNode.children.get(char)!;
 		}
 
-		this.#collectWords(currentNode, prefix, resultsMap);
-
-		resultsMap.entries().forEach(([word, docIds]) => {
-			docIds.forEach((id) => {
-				results.add(id);
-				const distance = levenshteinDistance(prefix, word);
-				// console.log(prefix, word, distance);
-				if (idToDistance.has(id)) {
-					idToDistance.set(id, Math.min(distance, idToDistance.get(id)!));
-				} else {
-					idToDistance.set(id, distance);
-				}
-			});
-		});
+		const idToDistance = new Map<string, number>();
+		this.#collectPrefixMatches(currentNode, 0, idToDistance);
 
 		if (returnWithDistance) {
-			return results.values().reduce((m, id) => {
-				m[id] = idToDistance.get(id)!;
-				return m;
-			}, {} as Record<string, number>);
+			return Object.fromEntries(idToDistance.entries());
 		}
-
-		const sortByDistanceAsc = (a: string, b: string) =>
-			idToDistance.get(a)! - idToDistance.get(b)!;
-
-		return [...results].toSorted(sortByDistanceAsc);
+		return [...idToDistance.keys()].sort(
+			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
+		);
 	}
 
-	/**
-	 * Search for all words associated with a docId.
-	 */
+	/** Search for all words associated with a docId. */
 	searchByDocId(docId: string): string[] {
 		const words = this.#docIdToWords.get(docId);
-		return words ? [...new Set(words)] : [];
+		return words ? [...words] : [];
 	}
 
 	/**
-	 * Search for docIds containing words similar to the query using Levenshtein distance.
+	 * Search for docIds containing words similar to the query.
+	 *
+	 * With the default distance function, traverses the trie with a rolling
+	 * edit-distance row and prunes subtrees whose row minimum exceeds `maxDistance`.
+	 * With a custom `distanceFn`, falls back to a linear scan over all words
+	 * (the distance function's properties are unknown to the pruner).
 	 */
 	searchFuzzy(word: string, maxDistance?: number): string[];
 	searchFuzzy(
@@ -277,77 +235,120 @@ export class TrieIndex extends Index {
 	): Record<string, number>;
 	searchFuzzy(
 		word: string,
+		maxDistance: number,
+		returnWithDistance: boolean,
+		options: FuzzyOptions
+	): string[] | Record<string, number>;
+	searchFuzzy(
+		word: string,
 		maxDistance: number = 2,
-		returnWithDistance: boolean = false
+		returnWithDistance: boolean = false,
+		options: FuzzyOptions = {}
 	): string[] | Record<string, number> {
-		const results = new Set<string>();
 		const idToDistance = new Map<string, number>();
-		const all = this.#collectAllWords();
 
-		for (const [indexedWord, docIds] of all.entries()) {
-			const distance = levenshteinDistance(word, indexedWord);
-			if (distance <= maxDistance) {
+		if (options.distanceFn) {
+			// Custom distance: can't safely prune without knowing its properties.
+			const all = this.#collectAllWords();
+			for (const [indexedWord, docIds] of all.entries()) {
+				const distance = options.distanceFn(word, indexedWord);
+				if (distance > maxDistance) continue;
 				docIds.forEach((id) => {
-					results.add(id);
-					if (idToDistance.has(id)) {
-						idToDistance.set(id, Math.min(distance, idToDistance.get(id)!));
-					} else {
+					const prev = idToDistance.get(id);
+					if (prev === undefined || distance < prev) {
 						idToDistance.set(id, distance);
 					}
 				});
 			}
+		} else {
+			// Trie-walked Levenshtein with row-min pruning.
+			this.#fuzzyWalk(word, maxDistance, idToDistance);
 		}
 
 		if (returnWithDistance) {
-			return results.values().reduce((m, id) => {
-				m[id] = idToDistance.get(id)!;
-				return m;
-			}, {} as Record<string, number>);
+			return Object.fromEntries(idToDistance.entries());
 		}
-
-		const sortByDistanceAsc = (a: string, b: string) =>
-			idToDistance.get(a)! - idToDistance.get(b)!;
-
-		return [...results].toSorted(sortByDistanceAsc);
+		return [...idToDistance.keys()].sort(
+			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
+		);
 	}
 
 	/**
-	 * Helper method to recursively remove a word from the trie
+	 * DFS over the trie maintaining the current Levenshtein row for the query.
+	 * Prunes subtrees whose row minimum exceeds `maxDistance`.
 	 */
+	#fuzzyWalk(
+		query: string,
+		maxDistance: number,
+		idToDistance: Map<string, number>
+	) {
+		const qChars = [...query];
+		const qLen = qChars.length;
+
+		// initial row = [0, 1, 2, ..., qLen]
+		const initialRow = new Array<number>(qLen + 1);
+		for (let j = 0; j <= qLen; j++) initialRow[j] = j;
+
+		const visit = (node: TrieNode, prevRow: number[]) => {
+			for (const [char, child] of node.children) {
+				const newRow = new Array<number>(qLen + 1);
+				newRow[0] = prevRow[0] + 1;
+				let rowMin = newRow[0];
+
+				for (let j = 1; j <= qLen; j++) {
+					const cost = qChars[j - 1] === char ? 0 : 1;
+					newRow[j] = Math.min(
+						prevRow[j] + 1,
+						newRow[j - 1] + 1,
+						prevRow[j - 1] + cost
+					);
+					if (newRow[j] < rowMin) rowMin = newRow[j];
+				}
+
+				if (child.isEOW && newRow[qLen] <= maxDistance) {
+					const distance = newRow[qLen];
+					child.docIds.forEach((id) => {
+						const prev = idToDistance.get(id);
+						if (prev === undefined || distance < prev) {
+							idToDistance.set(id, distance);
+						}
+					});
+				}
+
+				// Prune: if every cell in this row already exceeds maxDistance,
+				// no descendant can have final distance <= maxDistance.
+				if (rowMin <= maxDistance) visit(child, newRow);
+			}
+		};
+
+		// Root itself is never EOW in our model; just descend.
+		visit(this.#root, initialRow);
+	}
+
+	/** Recursive remove helper. Operates on pre-split code-point strings so
+	 * astral characters (emoji / surrogate pairs) index consistently with add. */
 	#removeWordFromTrie(
 		node: TrieNode,
-		word: string,
+		chars: string[],
 		index: number,
 		docId: string
 	): boolean {
-		// console.log("#removeWordFromTrie", word, index, char);
-
-		// Base case: we've reached the end of the word
-		if (index === word.length) {
-			if (!node.isEOW) {
-				return false; // Word not found
-			}
-
-			// Remove docId from this node
+		if (index === chars.length) {
+			if (!node.isEOW) return false;
 			const result = node.docIds.delete(docId);
-
-			// If no more docIds are associated with this word, mark it as not end of word
 			if (node.docIds.size === 0) {
 				node.isEOW = false;
+				this.#wordCount--;
 			}
-
 			return result;
 		}
 
-		const char = word[index];
-		if (!node.children.has(char)) {
-			return false; // Word not found
-		}
+		const char = chars[index];
+		if (!node.children.has(char)) return false;
 
 		const childNode: TrieNode = node.children.get(char)!;
-		const result = this.#removeWordFromTrie(childNode, word, index + 1, docId);
+		const result = this.#removeWordFromTrie(childNode, chars, index + 1, docId);
 
-		// Clean up nodes with no children and no docIds
 		if (childNode.children.size === 0 && !childNode.isEOW) {
 			node.children.delete(char);
 		}
@@ -355,54 +356,57 @@ export class TrieIndex extends Index {
 		return result;
 	}
 
-	/** Internal helper */
-	#collectWords(
+	/** Collects docIds from every EOW node in the subtree rooted at `node`,
+	 * tracking the distance from the prefix boundary. */
+	#collectPrefixMatches(
 		node: TrieNode,
-		currentWord: string,
-		results: Map<string, Set<string>> = new Map()
-	): void {
+		depthFromPrefix: number,
+		idToDistance: Map<string, number>
+	) {
 		if (node.isEOW) {
-			results.set(currentWord, new Set(node.docIds));
+			node.docIds.forEach((id) => {
+				const prev = idToDistance.get(id);
+				if (prev === undefined || depthFromPrefix < prev) {
+					idToDistance.set(id, depthFromPrefix);
+				}
+			});
 		}
-
-		for (const [char, childNode] of node.children.entries()) {
-			this.#collectWords(childNode, currentWord + char, results);
+		for (const child of node.children.values()) {
+			this.#collectPrefixMatches(child, depthFromPrefix + 1, idToDistance);
 		}
 	}
 
-	/**
-	 * Helper method to collect all words with associated docIds in the trie
-	 */
+	/** Helper: collect every word+docIds pair in the trie (used for dump + custom-fn fuzzy). */
 	#collectAllWords(): Map<string, Set<string>> {
 		const results = new Map<string, Set<string>>();
-		this.#collectWords(this.#root, "", results);
+		const visit = (node: TrieNode, word: string) => {
+			if (node.isEOW) results.set(word, new Set(node.docIds));
+			for (const [char, child] of node.children) {
+				visit(child, word + char);
+			}
+		};
+		visit(this.#root, "");
 		return results;
 	}
 
-	/**
-	 * Dumps the entire index into a JSON stringifiable structure
-	 */
+	/** Dumps the entire index into a JSON-stringifiable structure. */
 	dump(): {
-		version?: string;
+		version: string;
 		words: Record<string, string[]>;
 	} {
 		const allWords = this.#collectAllWords();
-		const out: { words: Record<string, string[]>; version?: string } = {
+		const out: { words: Record<string, string[]>; version: string } = {
 			words: {},
 			version: "1.0",
 		};
-
-		// Convert each word's docIds Set to an array for serialization
 		for (const [word, docIds] of allWords) {
 			out.words[word] = [...docIds];
 		}
-
 		return out;
 	}
 
-	/**
-	 * Restores the index from a dump structure
-	 */
+	/** Restores the index from a dump structure. Throws on malformed data
+	 * (original error preserved via `cause`). */
 	restore(
 		data: string | { version?: string; words: Record<string, string[]> }
 	): boolean {
@@ -414,15 +418,20 @@ export class TrieIndex extends Index {
 				};
 			}
 
-			if (!data || !data.words) {
+			if (!data || typeof data !== "object" || !data.words) {
 				return false;
 			}
 
-			// Clear existing data
+			if (data.version !== undefined && data.version !== "1.0") {
+				throw new Error(
+					`Unsupported dump version "${data.version}" (expected "1.0")`
+				);
+			}
+
 			this.#root = new TrieNode();
 			this.#docIdToWords.clear();
+			this.#wordCount = 0;
 
-			// Restore wordToDocIds (word -> Set of docIds)
 			for (const [word, docIds] of Object.entries(data.words)) {
 				for (const docId of docIds) {
 					this.addWord(word, docId);
@@ -431,8 +440,7 @@ export class TrieIndex extends Index {
 
 			return true;
 		} catch (e) {
-			console.error("Error restoring index", e);
-			throw new Error("Error restoring index");
+			throw new Error("Error restoring index", { cause: e });
 		}
 	}
 

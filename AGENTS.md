@@ -3,7 +3,7 @@
 ## Package Overview
 
 - **Name**: @marianmeres/searchable
-- **Version**: 2.3.1
+- **Version**: 2.5.0
 - **License**: MIT
 - **Runtime**: Deno (primary), Node.js (via NPM)
 - **Language**: TypeScript
@@ -12,7 +12,7 @@
 ## Purpose
 
 High-performance in-memory text search library for:
-- Autocomplete/typeahead features
+- Autocomplete / typeahead features
 - Document filtering
 - Fuzzy text matching
 
@@ -20,18 +20,18 @@ High-performance in-memory text search library for:
 
 ```
 src/
-├── mod.ts                    # Main entry point (re-exports all public API)
-├── searchable.ts             # Main Searchable class
+├── mod.ts                    # Main entry (re-exports lib + searchable)
+├── searchable.ts             # High-level Searchable class (coordinator)
 └── lib/
     ├── mod.ts                # Library exports
-    ├── index-abstract.ts     # Abstract Index interface
-    ├── index-inverted.ts     # InvertedIndex implementation (default)
-    ├── index-trie.ts         # TrieIndex implementation (for autocomplete)
-    ├── tokenize.ts           # String tokenization
-    ├── normalize.ts          # Text normalization
-    ├── unaccent.ts           # Accent removal
-    ├── levenshtein.ts        # Edit distance algorithm
-    ├── ngram.ts              # N-gram generation
+    ├── index-abstract.ts     # Abstract Index + DistanceFn / FuzzyOptions types
+    ├── index-inverted.ts     # InvertedIndex (hash map, O(1) exact)
+    ├── index-trie.ts         # TrieIndex (prefix tree, trie-walked fuzzy)
+    ├── tokenize.ts           # Unicode-aware word tokenization
+    ├── normalize.ts          # Case + accent normalization
+    ├── unaccent.ts           # NFD strip + extra precomposed-letter folds
+    ├── levenshtein.ts        # Code-point Levenshtein (+ optional Damerau)
+    ├── ngram.ts              # Character n-gram generation
     └── intersect.ts          # Set intersection utility
 ```
 
@@ -43,25 +43,37 @@ src/
 class Searchable {
   constructor(options?: Partial<SearchableOptions>)
 
-  // Core methods
+  // Mutations
   add(input: string, docId: string, strict?: boolean): number
-  addBatch(documents: [string, string][] | Record<string, string>, strict?: boolean): { added: number; errors: Array<{ docId: string; error: Error }> }
-  search(query: string, strategy?: "exact" | "prefix" | "fuzzy", options?: { maxDistance?: number }): string[]
-  searchExact(query: string): string[]
-  searchByPrefix(query: string): string[]
-  searchFuzzy(query: string, maxDistance?: number): string[]
+  addBatch(documents: [string, string][] | Record<string, string>, strict?: boolean):
+    { added: number; errors: Array<{ docId: string; error: Error }> }
+  replace(docId: string, input: string, strict?: boolean): number
+  removeDocId(docId: string): number
+
+  // Queries
+  search(query: string, strategy?: "exact" | "prefix" | "fuzzy", options?: SearchOptions): string[]
+  searchExact(query: string, options?: SearchOptions): string[]
+  searchByPrefix(query: string, options?: SearchOptions): string[]
+  searchFuzzy(query: string, maxDistance?: number, options?: SearchOptions): string[]
+  explainQuery(query: string): QueryExplanation
+
+  // Introspection
   toWords(input: string, isQuery?: boolean): string[]
+  toQueryGroups(input: string): string[][]
+  hasDocId(docId: string): boolean
 
   // Persistence
   dump(stringify?: boolean): string | Record<string, any>
   restore(dump: any): boolean
+  static fromDump(dump: any, options?: Partial<SearchableOptions>): Searchable
 
-  // Static
-  static merge(indexes: Searchable[]): { search: (query: string) => string[] }
+  // Composition
+  static merge(indexes: Searchable[]): MergedSearchable
 
   // Properties
   get wordCount(): number
-  get lastQuery(): LastQuery
+  get docIdCount(): number
+  get lastQuery(): LastQuery       // returns shallow copy
   get __index(): Index
 }
 ```
@@ -73,7 +85,7 @@ interface SearchableOptions {
   caseSensitive: boolean              // default: false
   accentSensitive: boolean            // default: false
   isStopword: (word: string) => boolean
-  normalizeWord: (word: string) => string | string[]
+  normalizeWord: (word: string) => string | string[]  // applied at index AND query time
   index: "inverted" | "trie"          // default: "inverted"
   nonWordCharWhitelist: string        // default: "@-"
   ngramsSize: 0 | 3 | 4 | 5 | (3 | 4 | 5)[]  // default: 0
@@ -81,9 +93,44 @@ interface SearchableOptions {
   defaultSearchOptions: Partial<{
     strategy: "exact" | "prefix" | "fuzzy"  // default: "prefix"
     maxDistance: number               // default: 2
+    limit: number
+    offset: number
+    distanceFn: DistanceFn
   }>
   lastQueryHistoryLength: number      // default: 5
 }
+
+interface SearchOptions {
+  maxDistance?: number
+  limit?: number
+  offset?: number
+  distanceFn?: DistanceFn
+}
+
+interface QueryExplanation {
+  raw: string
+  normalized: string
+  tokens: string[]
+  afterStopwords: string[]
+  groups: string[][]         // OR within group, AND across groups
+  wouldSearch: boolean
+}
+
+interface LastQuery {
+  history: string[]          // normalized queries
+  rawHistory: string[]       // raw user input, same length/order as history
+  raw: string | undefined
+  used: string | undefined
+}
+
+interface MergedSearchable {
+  search(query: string, options?: SearchOptions): string[]
+  searchExact(query: string, options?: SearchOptions): string[]
+  searchByPrefix(query: string, options?: SearchOptions): string[]
+  searchFuzzy(query: string, maxDistance?: number, options?: SearchOptions): string[]
+}
+
+type DistanceFn = (a: string, b: string) => number
 ```
 
 ### Index Classes
@@ -94,6 +141,7 @@ abstract class Index {
   get docIdCount(): number
   getAllWords(): string[]
   getAllDocIds(): string[]
+  hasDocId(docId: string): boolean
   addWord(word: string, docId: string): boolean
   removeWord(word: string, docId: string): boolean
   removeDocId(docId: string): number
@@ -103,12 +151,16 @@ abstract class Index {
   searchByDocId(docId: string): string[]
   searchFuzzy(word: string, maxDistance?: number): string[]
   searchFuzzy(word: string, maxDistance: number, returnWithDistance: true): Record<string, number>
-  dump(): { version?: string; words: Record<string, string[]> }
+  searchFuzzy(word: string, maxDistance: number, returnWithDistance: boolean, options: FuzzyOptions):
+    string[] | Record<string, number>
+  dump(): { version: string; words: Record<string, string[]> }
   restore(data: string | object): boolean
 }
 
+interface FuzzyOptions { distanceFn?: DistanceFn }
+
 class InvertedIndex extends Index  // Hash map based, O(1) exact lookup
-class TrieIndex extends Index      // Prefix tree, O(k) prefix lookup
+class TrieIndex extends Index      // Trie, O(k) prefix, trie-walked fuzzy w/ pruning
 ```
 
 ### Utility Functions
@@ -117,52 +169,85 @@ class TrieIndex extends Index      // Prefix tree, O(k) prefix lookup
 function tokenize(inputString: string, nonWordCharWhitelist?: string): string[]
 function normalize(input: string, options?: { caseSensitive?: boolean; accentSensitive?: boolean }): string
 function unaccent(input: string): string
-function levenshteinDistance(source: string, target: string): number
+function levenshteinDistance(source: string, target: string, options?: { damerau?: boolean }): number
 function createNgrams(normalizedText: string, size?: number, options?: { padChar?: string }): string[]
 function intersect<T>(...arrays: (readonly T[])[]): T[]
 ```
 
 ## Search Strategies
 
-| Strategy | Time Complexity | Use Case |
-|----------|-----------------|----------|
-| exact    | O(1) inverted / O(k) trie | Known exact terms |
-| prefix   | O(n) inverted / O(k) trie | Autocomplete, typeahead |
-| fuzzy    | O(n × m) | Typo tolerance |
+| Strategy | Inverted | Trie | Use Case |
+|----------|----------|------|----------|
+| exact    | O(1) hash | O(k) traversal | Known exact terms |
+| prefix   | O(n) scan | O(k + subtree) | Autocomplete, typeahead |
+| fuzzy    | O(n·m) scan | O(pruned walk) — usually much smaller than n·m | Typo tolerance |
 
-Where: n = total words, k = query length, m = average word length
+Where: n = total words, k = query length, m = average word length.
 
 ## Index Implementation Comparison
 
 | Feature | InvertedIndex | TrieIndex |
 |---------|---------------|-----------|
 | Exact search | O(1) | O(k) |
-| Prefix search | O(n) | O(k) |
-| Memory usage | Lower | Higher |
-| Recommended for | General use | Autocomplete-heavy |
+| Prefix search | O(n) | O(k + matches) |
+| Fuzzy search | O(n·m) linear | pruned trie walk, typically faster for vocabularies with many shared prefixes |
+| Memory | lower | higher (one node per char per path) |
+| Recommended for | small indexes / simple use | autocomplete / fuzzy heavy / large vocabularies |
 
-## Data Flow
+## Data Flow (index path)
 
 ```
-Input String
-    ↓
-normalize() → lowercase, remove accents
-    ↓
-tokenize() → split into words
-    ↓
-isStopword filter → remove ignored words
-    ↓
-normalizeWord() → custom processing (stemming, aliases)
-    ↓
-Index.addWord() → store word → docId mapping
+Input
+  │
+  ▼
+normalize()        → trim + optional lowercase + unaccent (incl. ß→ss, ø→o, æ→ae...)
+  │
+  ▼
+tokenize()         → split on non-\p{L}\p{N}\p{Pc}+whitelist
+  │
+  ▼
+isStopword filter
+  │
+  ▼
+normalizeWord()    → may return string or array (aliases)
+  │
+  ▼
+re-normalize each variant, re-filter stopwords, dedupe
+  │
+  ▼
+Index.addWord(word, docId) + optional n-grams
+```
+
+## Data Flow (query path)
+
+```
+Query
+  │
+  ▼
+normalize()
+  │
+  ▼
+tokenize() + isStopword filter
+  │
+  ▼
+normalizeWord() → expand each token to a GROUP of variants
+  │
+  ▼
+for each group: union of worker(variant) results     (OR within group)
+  │
+  ▼
+intersect across groups                               (AND across groups)
+  │
+  ▼
+sort by min distance, then limit/offset
 ```
 
 ## Test Commands
 
 ```bash
-deno test                    # Run all tests
-deno test --watch            # Watch mode
-deno task test               # Via task runner
+deno task test               # All tests
+deno task test:watch         # Watch mode
+deno bench bench/bench.ts    # Benchmarks
 ```
 
 ## Build Commands
@@ -171,68 +256,80 @@ deno task test               # Via task runner
 deno task npm:build          # Build NPM package
 deno task npm:publish        # Build and publish to NPM
 deno publish                 # Publish to JSR
+deno task rp                 # Release patch + publish
+deno task rpm                # Release minor + publish
 ```
 
 ## Dependencies
 
-- `@std/assert` - Testing assertions
-- `@std/fs` - File system utilities (build only)
-- `@std/path` - Path utilities (build only)
-- `@marianmeres/npmbuild` - NPM build tooling
-
-## File Purposes
-
-| File | Purpose |
-|------|---------|
-| `src/mod.ts` | Main entry, re-exports all public API |
-| `src/searchable.ts` | Main Searchable class with high-level API |
-| `src/lib/index-abstract.ts` | Abstract Index interface definition |
-| `src/lib/index-inverted.ts` | Hash map based index implementation |
-| `src/lib/index-trie.ts` | Trie based index implementation |
-| `src/lib/tokenize.ts` | Unicode-aware word tokenization |
-| `src/lib/normalize.ts` | Case and accent normalization |
-| `src/lib/unaccent.ts` | Diacritical mark removal |
-| `src/lib/levenshtein.ts` | Edit distance calculation |
-| `src/lib/ngram.ts` | Character n-gram generation |
-| `src/lib/intersect.ts` | Array intersection utility |
+- `@std/assert`    — testing assertions
+- `@std/fs`        — file system utilities (build only)
+- `@std/path`      — path utilities (build only)
+- `@marianmeres/npmbuild` — NPM build tooling
 
 ## Common Patterns
 
-### Basic Usage
+### Basic usage
 ```typescript
-const index = new Searchable();
-index.add("searchable text", "doc-id");
-const results = index.search("query");
+const idx = new Searchable();
+idx.add("searchable text", "doc-id");
+idx.search("query");
 ```
 
-### Persistence
+### Persistence with index-type swap
 ```typescript
-// Save
-const dump = index.dump();
-localStorage.setItem("index", dump);
-
-// Restore
-const index = new Searchable();
-index.restore(localStorage.getItem("index"));
+const dumped = fromInverted.dump();
+const trie = Searchable.fromDump(dumped, { index: "trie" });
 ```
 
-### Multiple Indexes
+### Update in place
 ```typescript
-const merged = Searchable.merge([index1, index2]);
-const results = merged.search("query");
+idx.replace("doc-id", "new text");
 ```
 
-### Custom Processing
+### Custom distance
 ```typescript
-const index = new Searchable({
-  isStopword: (w) => ["the", "a", "an"].includes(w),
-  normalizeWord: (w) => stemmer(w),  // your stemmer function
-});
+import { levenshteinDistance } from "@marianmeres/searchable";
+const damerau = (a, b) => levenshteinDistance(a, b, { damerau: true });
+idx.search("recieve", "fuzzy", { maxDistance: 1, distanceFn: damerau });
+```
+
+### Pagination
+```typescript
+idx.search("apple", "prefix", { limit: 10, offset: 20 });
+```
+
+### Debugging
+```typescript
+idx.explainQuery("The Hello World!");
+// → { raw, normalized, tokens, afterStopwords, groups, wouldSearch }
+```
+
+### Multiple indexes
+```typescript
+const merged = Searchable.merge([idx1, idx2]);
+merged.searchByPrefix("query", { limit: 10 });
 ```
 
 ## Error Handling
 
-- `add()` throws on invalid input when `strict=true` (default)
-- `add()` returns 0 silently when `strict=false`
-- `addBatch()` collects errors when `strict=false` (default)
-- `restore()` returns `false` on invalid data, throws on parse errors
+- `add()` throws on invalid input when `strict=true` (default).
+- `add()` returns 0 silently when `strict=false`.
+- `addBatch()` collects errors when `strict=false` (default) — otherwise throws on first.
+- `restore()` returns `false` when the dump has no `words` field; throws `Error`
+  (with `cause` set) on parse failure or unsupported `version` (only `"1.0"` is accepted).
+- `search()` returns `[]` when `querySomeWordMinLength` gates the query out
+  (no exception thrown).
+- `replace()` always succeeds on the remove side (silently no-op if docId unknown),
+  then runs `add()` with the given `strict` flag.
+
+## Version history of behavior-impacting changes
+
+See [BC.md](BC.md) for full details. Headline changes in 2.5.0:
+- `normalizeWord` now also runs at query time (groups → OR within / AND across).
+- `unaccent` folds ß, ø, æ, œ, đ, ł, þ, ð, ı, ...
+- Levenshtein iterates code points (astral-safe) and supports Damerau mode.
+- `TrieIndex.searchFuzzy` rewritten as trie-walked DP with pruning (~20× faster).
+- New: `Searchable.fromDump`, `replace`, `hasDocId`, `explainQuery`,
+  `toQueryGroups`, `SearchOptions` (limit/offset/distanceFn), expanded `merge`.
+- `restore` throws with `cause`, rejects unknown dump versions.

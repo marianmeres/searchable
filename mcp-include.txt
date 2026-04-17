@@ -1,1 +1,5 @@
-Customizable fast text search index with exact, prefix, and fuzzy word matching. Great for filtering in-memory documents like autocomplete or typeahead, with results ranked by Levenshtein distance.
+Customizable fast text search index with exact, prefix, and fuzzy word matching. Great for
+filtering in-memory documents like autocomplete or typeahead. Results ranked by Levenshtein
+distance by default; the distance function is pluggable (Damerau-Levenshtein built in).
+Inverted and trie indexes; trie fuzzy walks the tree with row-min pruning. Unicode-safe
+(code-point iteration) and accent-folding covers precomposed letters (ß→ss, ø→o, æ→ae, ...).

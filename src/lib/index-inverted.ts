@@ -1,5 +1,7 @@
-import { Index } from "./index-abstract.ts";
+import { Index, type DistanceFn, type FuzzyOptions } from "./index-abstract.ts";
 import { levenshteinDistance } from "./levenshtein.ts";
+
+const defaultDistanceFn: DistanceFn = (a, b) => levenshteinDistance(a, b);
 
 /**
  * Hash map based inverted index implementation.
@@ -32,23 +34,17 @@ export class InvertedIndex extends Index {
 		return this.#wordToDocIds.size;
 	}
 
-	/**
-	 * Get the total number of unique docIds in the index.
-	 */
+	/** Get the total number of unique docIds in the index. */
 	get docIdCount(): number {
 		return this.#docIdToWords.size;
 	}
 
-	/**
-	 * Get all the words in the index.
-	 */
+	/** Get all the words in the index. */
 	getAllWords(): string[] {
 		return [...this.#wordToDocIds.keys()];
 	}
 
-	/**
-	 * Get all the docIds in the index.
-	 */
+	/** Get all the docIds in the index. */
 	getAllDocIds(): string[] {
 		return [...this.#docIdToWords.keys()];
 	}
@@ -69,7 +65,6 @@ export class InvertedIndex extends Index {
 	addWord(word: string, docId: string): boolean {
 		this.#assertWordAndDocId(word, docId);
 
-		// Add to word -> docIds mapping
 		if (!this.#wordToDocIds.has(word)) {
 			this.#wordToDocIds.set(word, new Set());
 		}
@@ -77,7 +72,6 @@ export class InvertedIndex extends Index {
 		const isNewEntry = !docIds.has(docId);
 		docIds.add(docId);
 
-		// Add to docId -> words mapping
 		if (!this.#docIdToWords.has(docId)) {
 			this.#docIdToWords.set(docId, new Set());
 		}
@@ -93,66 +87,49 @@ export class InvertedIndex extends Index {
 	removeWord(word: string, docId: string): boolean {
 		this.#assertWordAndDocId(word, docId);
 
-		// Remove from word -> docIds mapping
 		const docIds = this.#wordToDocIds.get(word);
 		if (!docIds) return false;
 
 		const removed = docIds.delete(docId);
+		if (docIds.size === 0) this.#wordToDocIds.delete(word);
 
-		// If no more docs contain this word, remove the word entry entirely
-		if (docIds.size === 0) {
-			this.#wordToDocIds.delete(word);
-		}
-
-		// Remove from docId -> words mapping
 		const words = this.#docIdToWords.get(docId);
 		if (words) {
 			words.delete(word);
-			if (words.size === 0) {
-				this.#docIdToWords.delete(docId);
-			}
+			if (words.size === 0) this.#docIdToWords.delete(docId);
 		}
 
 		return removed;
 	}
 
-	/**
-	 * Remove all entries for a given docId.
-	 */
+	/** Remove all entries for a given docId. */
 	removeDocId(docId: string): number {
 		const words = this.#docIdToWords.get(docId);
 		if (!words) return 0;
-
 		const count = words.size;
 
-		// Remove all words associated with this docId
 		for (const word of words) {
 			const docIds = this.#wordToDocIds.get(word)!;
 			docIds.delete(docId);
-
-			// Clean up empty word entries
-			if (docIds.size === 0) {
-				this.#wordToDocIds.delete(word);
-			}
+			if (docIds.size === 0) this.#wordToDocIds.delete(word);
 		}
 
-		// Remove the docId entry
 		this.#docIdToWords.delete(docId);
-
 		return count;
 	}
 
-	/**
-	 * Search for docIds containing the exact word.
-	 */
-	searchExact(word: string): string[] {
-		const result = this.#wordToDocIds.get(word);
-		return result ? [...new Set(result)] : [];
+	/** Returns true if the docId exists in the index. */
+	hasDocId(docId: string): boolean {
+		return this.#docIdToWords.has(docId);
 	}
 
-	/**
-	 * Search for docIds containing words with the given prefix.
-	 */
+	/** Search for docIds containing the exact word. */
+	searchExact(word: string): string[] {
+		const result = this.#wordToDocIds.get(word);
+		return result ? [...result] : [];
+	}
+
+	/** Search for docIds containing words with the given prefix. */
 	searchByPrefix(prefix: string): string[];
 	searchByPrefix(
 		prefix: string,
@@ -162,47 +139,38 @@ export class InvertedIndex extends Index {
 		prefix: string,
 		returnWithDistance: boolean = false
 	): string[] | Record<string, number> {
-		const results = new Set<string>();
 		const idToDistance = new Map<string, number>();
+		// For a true prefix match, levenshtein(prefix, word) == codepoint-length diff.
+		const prefixLen = [...prefix].length;
 
 		for (const [word, docIds] of this.#wordToDocIds.entries()) {
-			if (word.startsWith(prefix)) {
-				const distance = levenshteinDistance(prefix, word);
-				// console.log(prefix, word, distance);
-				docIds.forEach((id) => {
-					results.add(id);
-					if (idToDistance.has(id)) {
-						idToDistance.set(id, Math.min(distance, idToDistance.get(id)!));
-					} else {
-						idToDistance.set(id, distance);
-					}
-				});
-			}
+			if (!word.startsWith(prefix)) continue;
+			const distance = [...word].length - prefixLen;
+			docIds.forEach((id) => {
+				const prev = idToDistance.get(id);
+				if (prev === undefined || distance < prev) {
+					idToDistance.set(id, distance);
+				}
+			});
 		}
 
 		if (returnWithDistance) {
-			return results.values().reduce((m, id) => {
-				m[id] = idToDistance.get(id)!;
-				return m;
-			}, {} as Record<string, number>);
+			return Object.fromEntries(idToDistance.entries());
 		}
-
-		const sortByDistanceAsc = (a: string, b: string) =>
-			idToDistance.get(a)! - idToDistance.get(b)!;
-
-		return [...results].toSorted(sortByDistanceAsc);
+		return [...idToDistance.keys()].sort(
+			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
+		);
 	}
 
-	/**
-	 * Search for all words associated with a docIds.
-	 */
+	/** Search for all words associated with a docId. */
 	searchByDocId(docId: string): string[] {
 		const words = this.#docIdToWords.get(docId);
-		return words ? [...new Set(words)] : [];
+		return words ? [...words] : [];
 	}
 
 	/**
-	 * Search for docIds containing words similar to the query using Levenshtein distance.
+	 * Search for docIds containing words similar to the query.
+	 * Uses Levenshtein distance by default; pass `distanceFn` to customize.
 	 */
 	searchFuzzy(word: string, maxDistance?: number): string[];
 	searchFuzzy(
@@ -212,59 +180,65 @@ export class InvertedIndex extends Index {
 	): Record<string, number>;
 	searchFuzzy(
 		word: string,
+		maxDistance: number,
+		returnWithDistance: boolean,
+		options: FuzzyOptions
+	): string[] | Record<string, number>;
+	searchFuzzy(
+		word: string,
 		maxDistance: number = 2,
-		returnWithDistance: boolean = false
+		returnWithDistance: boolean = false,
+		options: FuzzyOptions = {}
 	): string[] | Record<string, number> {
-		const results = new Set<string>();
+		const distanceFn = options.distanceFn ?? defaultDistanceFn;
+		const queryLen = [...word].length;
 		const idToDistance = new Map<string, number>();
 
 		for (const [indexedWord, docIds] of this.#wordToDocIds.entries()) {
-			const distance = levenshteinDistance(word, indexedWord);
-			if (distance <= maxDistance) {
-				docIds.forEach((id) => {
-					results.add(id);
-					if (idToDistance.has(id)) {
-						idToDistance.set(id, Math.min(distance, idToDistance.get(id)!));
-					} else {
-						idToDistance.set(id, distance);
-					}
-				});
+			// Cheap length pre-filter (Levenshtein distance >= |len(a) - len(b)|).
+			// Only valid for distance functions that satisfy this (the default does).
+			if (
+				!options.distanceFn &&
+				Math.abs([...indexedWord].length - queryLen) > maxDistance
+			) {
+				continue;
 			}
+
+			const distance = distanceFn(word, indexedWord);
+			if (distance > maxDistance) continue;
+
+			docIds.forEach((id) => {
+				const prev = idToDistance.get(id);
+				if (prev === undefined || distance < prev) {
+					idToDistance.set(id, distance);
+				}
+			});
 		}
 
 		if (returnWithDistance) {
-			return results.values().reduce((m, id) => {
-				m[id] = idToDistance.get(id)!;
-				return m;
-			}, {} as Record<string, number>);
+			return Object.fromEntries(idToDistance.entries());
 		}
-
-		const sortByDistanceAsc = (a: string, b: string) =>
-			idToDistance.get(a)! - idToDistance.get(b)!;
-
-		return [...results].toSorted(sortByDistanceAsc);
+		return [...idToDistance.keys()].sort(
+			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
+		);
 	}
 
-	/**
-	 * Dump the index to a JSON-stringifiable structure.
-	 */
+	/** Dump the index to a JSON-stringifiable structure. */
 	dump(): {
-		version?: string;
+		version: string;
 		words: Record<string, string[]>;
 	} {
-		// Convert the Map of Sets to a plain object with arrays
 		const words: Record<string, string[]> = {};
 		for (const [word, docIds] of this.#wordToDocIds.entries()) {
 			words[word] = [...docIds];
 		}
-
 		return { words, version: "1.0" };
 	}
 
 	/**
-	 * Clear exising internal state (if any), and restores the index from a previously
-	 * dumped structure.
-	 * This method rebuilds the inverted index from a structure created by the dump() method.
+	 * Clears existing state and restores the index from a dump produced by `dump()`.
+	 * Returns `true` on success or `false` if the input has no `words` field.
+	 * Throws `Error` (with `cause` set to the underlying error) on JSON / structural failure.
 	 */
 	restore(
 		data: string | { version?: string; words: Record<string, string[]> }
@@ -277,18 +251,22 @@ export class InvertedIndex extends Index {
 				};
 			}
 
-			if (!data || !data.words) {
+			if (!data || typeof data !== "object" || !data.words) {
 				return false;
 			}
-			// Clear existing data
+
+			if (data.version !== undefined && data.version !== "1.0") {
+				throw new Error(
+					`Unsupported dump version "${data.version}" (expected "1.0")`
+				);
+			}
+
 			this.#wordToDocIds.clear();
 			this.#docIdToWords.clear();
 
-			// Restore wordToDocIds (word -> Set of docIds)
 			for (const [word, docIds] of Object.entries(data.words)) {
 				this.#wordToDocIds.set(word, new Set(docIds));
-
-				for (const docId of docIds.values()) {
+				for (const docId of docIds) {
 					if (!this.#docIdToWords.has(docId)) {
 						this.#docIdToWords.set(docId, new Set());
 					}
@@ -298,8 +276,7 @@ export class InvertedIndex extends Index {
 
 			return true;
 		} catch (e) {
-			console.error("Error restoring index", e);
-			throw new Error("Error restoring index");
+			throw new Error("Error restoring index", { cause: e });
 		}
 	}
 }

@@ -2,18 +2,25 @@
 
 Complete API documentation for `@marianmeres/searchable`.
 
+> Behavior changes between versions live in [BC.md](BC.md).
+
 ## Table of Contents
 
 - [Searchable (Main Class)](#searchable)
   - [Constructor](#constructor)
-  - [Methods](#methods)
+  - [Static Methods](#static-methods)
+  - [Instance Methods](#instance-methods)
   - [Properties](#properties)
 - [Interfaces](#interfaces)
   - [SearchableOptions](#searchableoptions)
+  - [SearchOptions](#searchoptions)
+  - [QueryExplanation](#queryexplanation)
   - [LastQuery](#lastquery)
+  - [MergedSearchable](#mergedsearchable)
 - [Index Implementations](#index-implementations)
   - [InvertedIndex](#invertedindex)
   - [TrieIndex](#trieindex)
+  - [Shared methods](#index-methods-both-implementations)
 - [Utility Functions](#utility-functions)
   - [tokenize](#tokenize)
   - [normalize](#normalize)
@@ -34,29 +41,56 @@ The main class for creating and managing a text search index.
 constructor(options?: Partial<SearchableOptions>)
 ```
 
-Creates a new Searchable index instance.
+Creates a new Searchable index. See [SearchableOptions](#searchableoptions).
 
-**Parameters:**
-- `options` - Optional configuration object (see [SearchableOptions](#searchableoptions))
-
-**Example:**
 ```typescript
 import { Searchable } from '@marianmeres/searchable';
 
-// With defaults
-const index = new Searchable();
-
-// With custom options
 const index = new Searchable({
   caseSensitive: false,
   accentSensitive: false,
-  index: "inverted",
+  index: "trie",
   ngramsSize: [3, 4],
-  isStopword: (word) => ['the', 'a', 'an'].includes(word),
+  isStopword: (w) => ['the', 'a', 'an'].includes(w),
 });
 ```
 
-### Methods
+---
+
+### Static Methods
+
+#### Searchable.fromDump
+
+```typescript
+static fromDump(dump: any, options?: Partial<SearchableOptions>): Searchable
+```
+
+Construct a Searchable from a previously-produced dump. The dump format is
+index-agnostic, so you may pick a different `index` at restore time (e.g.
+migrate inverted → trie).
+
+```typescript
+const trie = Searchable.fromDump(await Deno.readTextFile('./dump.json'), {
+  index: 'trie',
+});
+```
+
+#### Searchable.merge
+
+```typescript
+static merge(indexes: Searchable[]): MergedSearchable
+```
+
+Unified facade across multiple Searchables. Results are the deduplicated union
+of each instance's matches for the same query. Each child runs with its own
+configured options unless you pass `options` at call time.
+
+Returns a [MergedSearchable](#mergedsearchable) with full `search` / `searchExact`
+/ `searchByPrefix` / `searchFuzzy` surface.
+
+---
+
+### Instance Methods
 
 #### add
 
@@ -64,23 +98,9 @@ const index = new Searchable({
 add(input: string, docId: string, strict?: boolean): number
 ```
 
-Adds a searchable text string to the index associated with a document ID.
+Index `input` under `docId`. Returns the number of new word-docId pairs added.
 
-**Parameters:**
-- `input` - The searchable text to index
-- `docId` - Unique identifier for the document
-- `strict` - If `true`, throws on invalid input. If `false`, silently returns 0 (default: `true`)
-
-**Returns:** Number of new word-docId pairs added to the index
-
-**Example:**
-```typescript
-const index = new Searchable();
-const added = index.add("james bond", "007");
-console.log(`Added ${added} word-document pairs`);
-```
-
----
+- `strict` — if `true` (default), throws on invalid input; if `false`, returns `0`.
 
 #### addBatch
 
@@ -91,37 +111,32 @@ addBatch(
 ): { added: number; errors: Array<{ docId: string; error: Error }> }
 ```
 
-Efficiently adds multiple documents to the index in batch.
+Batch version. Accepts an array of tuples or a `Record<docId, text>`. Default
+`strict` is `false` (collects errors instead of throwing).
 
-**Parameters:**
-- `documents` - Array of `[docId, text]` tuples or `Record<docId, text>` object
-- `strict` - If `true`, stops on first error. If `false`, continues and collects errors (default: `false`)
+#### replace
 
-**Returns:** Object with count of added entries and any errors encountered
-
-**Example:**
 ```typescript
-const index = new Searchable();
-
-// Array format
-const result = index.addBatch([
-  ["doc1", "james bond"],
-  ["doc2", "mission impossible"],
-]);
-
-// Object format
-index.addBatch({
-  doc1: "james bond",
-  doc2: "mission impossible",
-});
-
-console.log(`Added ${result.added} entries`);
-if (result.errors.length) {
-  console.error(`Failed: ${result.errors.length} documents`);
-}
+replace(docId: string, input: string, strict?: boolean): number
 ```
 
----
+Clears all indexed content for `docId` then adds `input`. Use this instead of
+`removeDocId` + `add` to avoid leaving stale words behind when you forget.
+
+#### removeDocId
+
+```typescript
+removeDocId(docId: string): number
+```
+
+Removes all indexed content for `docId`. Returns the number of word-docId
+pairs deleted.
+
+#### hasDocId
+
+```typescript
+hasDocId(docId: string): boolean
+```
 
 #### search
 
@@ -129,115 +144,34 @@ if (result.errors.length) {
 search(
   query: string,
   strategy?: "exact" | "prefix" | "fuzzy",
-  options?: { maxDistance?: number }
+  options?: SearchOptions
 ): string[]
 ```
 
-Main search API entry point with configurable strategy.
-
-**Parameters:**
-- `query` - The search query string
-- `strategy` - Search strategy: `"exact"`, `"prefix"`, or `"fuzzy"` (default from options, typically `"prefix"`)
-- `options.maxDistance` - Maximum Levenshtein distance for fuzzy search (default: 2)
-
-**Returns:** Array of docIds matching the query
-
-**Example:**
-```typescript
-const index = new Searchable();
-index.add("james bond", "007");
-
-// Use default strategy (prefix)
-const results = index.search("bond");
-
-// Specify strategy explicitly
-const exact = index.search("bond", "exact");
-const fuzzy = index.search("bnd", "fuzzy", { maxDistance: 1 });
-```
-
----
-
-#### searchExact
+Main entry point. Dispatches to the named strategy (default comes from
+`defaultSearchOptions.strategy`).
 
 ```typescript
-searchExact(query: string): string[]
+index.search('bond');                                           // default strategy
+index.search('bond', 'exact');
+index.search('bnd', 'fuzzy', { maxDistance: 1 });
+index.search('bond', 'prefix', { limit: 10, offset: 0 });
+index.search('recieve', 'fuzzy', {
+  maxDistance: 1,
+  distanceFn: (a, b) => levenshteinDistance(a, b, { damerau: true }),
+});
 ```
 
-Searches the index for documents containing exact word matches from the query.
-
-This is the fastest search strategy. All query words must match exactly (after normalization).
-
-**Parameters:**
-- `query` - The search query string
-
-**Returns:** Array of docIds that match all query words exactly
-
-**Example:**
-```typescript
-const index = new Searchable();
-index.add("home office", "doc1");
-index.add("office space", "doc2");
-
-const results = index.searchExact("office");
-// returns: ["doc1", "doc2"]
-```
-
----
-
-#### searchByPrefix
+#### searchExact / searchByPrefix / searchFuzzy
 
 ```typescript
-searchByPrefix(query: string): string[]
+searchExact(query: string, options?: SearchOptions): string[]
+searchByPrefix(query: string, options?: SearchOptions): string[]
+searchFuzzy(query: string, maxDistance?: number, options?: SearchOptions): string[]
 ```
 
-Searches the index for documents containing words that start with the query words.
-
-Recommended strategy for autocomplete and typeahead features. Results are sorted by Levenshtein distance (closest matches first).
-
-**Parameters:**
-- `query` - The search query string
-
-**Returns:** Array of docIds sorted by match quality (best matches first)
-
-**Example:**
-```typescript
-const index = new Searchable();
-index.add("restaurant", "doc1");
-index.add("rest area", "doc2");
-
-const results = index.searchByPrefix("rest");
-// returns: ["doc1", "doc2"] sorted by match quality
-```
-
----
-
-#### searchFuzzy
-
-```typescript
-searchFuzzy(query: string, maxDistance?: number): string[]
-```
-
-Searches the index using fuzzy matching based on Levenshtein distance.
-
-Useful for handling typos and partial matches. Results are sorted by distance (closest matches first).
-
-**Parameters:**
-- `query` - The search query string
-- `maxDistance` - Maximum Levenshtein distance to consider a match (default: 2)
-
-**Returns:** Array of docIds sorted by match quality (best matches first)
-
-**Example:**
-```typescript
-const index = new Searchable();
-index.add("restaurant", "doc1");
-
-// Handles typos
-const results = index.searchFuzzy("resturant", 2);
-// returns: ["doc1"]
-```
-
----
+Strategy-specific methods. All three accept `SearchOptions` for `limit`,
+`offset`, and (fuzzy) `distanceFn`.
 
 #### toWords
 
@@ -245,24 +179,36 @@ const results = index.searchFuzzy("resturant", 2);
 toWords(input: string, isQuery?: boolean): string[]
 ```
 
-Splits the input string into words respecting the `nonWordCharWhitelist` option.
+Returns the flat, de-duplicated word list a given input produces. Since v2.5.0,
+`isQuery=true` also applies `normalizeWord` to match the query-side pipeline —
+note that when the normalizer returns arrays the flattened output loses the
+group boundary. For proper group-aware queries, use [toQueryGroups](#toquerygroups).
 
-Applies normalization, tokenization, stopword filtering, and custom word normalization.
+#### toQueryGroups
 
-**Parameters:**
-- `input` - The string to tokenize
-- `isQuery` - Whether this is a search query, affects processing (default: `false`)
-
-**Returns:** Array of unique normalized words
-
-**Example:**
 ```typescript
-const index = new Searchable();
-const words = index.toWords("Café-Restaurant in São Paulo");
-// returns: ["cafe-restaurant", "in", "sao", "paulo"]
+toQueryGroups(input: string): string[][]
 ```
 
----
+Splits the input into **groups** of alternate terms — one group per original
+tokenized term, containing that term's `normalizeWord` expansion. Search
+semantics: OR within a group, AND across groups. This is the shape the
+internal search pipeline uses.
+
+```typescript
+// normalizeWord maps "colour" → ["colour", "color"]
+index.toQueryGroups('big colour test');
+// [ ["big"], ["colour", "color"], ["test"] ]
+```
+
+#### explainQuery
+
+```typescript
+explainQuery(query: string): QueryExplanation
+```
+
+Returns a step-by-step view of the query pipeline — great for answering "why
+didn't my query match?". See [QueryExplanation](#queryexplanation).
 
 #### dump
 
@@ -270,113 +216,30 @@ const words = index.toWords("Café-Restaurant in São Paulo");
 dump(stringify?: boolean): string | Record<string, any>
 ```
 
-Exports the index internals to a JSON-serializable structure.
-
-**Parameters:**
-- `stringify` - If `true`, returns JSON string. If `false`, returns plain object (default: `true`)
-
-**Returns:** Serialized index data as string or object
-
-**Example:**
-```typescript
-const index = new Searchable();
-index.add("james bond", "007");
-
-// Save to file
-const data = index.dump();
-await Deno.writeTextFile("index.json", data);
-
-// Or work with object
-const obj = index.dump(false);
-```
-
----
+Exports the index to a JSON-serializable structure. Default `stringify` is
+`true` (returns a JSON string).
 
 #### restore
 
 ```typescript
-restore(dump: string | object): boolean
+restore(dump: any): boolean
 ```
 
-Resets and restores the internal index state from a previously dumped structure.
-
-**Parameters:**
-- `dump` - Previously dumped index data (string or object)
-
-**Returns:** `true` if restore was successful, `false` otherwise
-
-**Example:**
-```typescript
-const index = new Searchable();
-
-// Load from file
-const data = await Deno.readTextFile("index.json");
-const success = index.restore(data);
-
-if (success) {
-  const results = index.search("bond");
-}
-```
+Replaces internal state with the dump contents. Returns `true` on success,
+`false` when `dump.words` is missing. Throws `Error` (with `cause` populated)
+on malformed JSON or unsupported version. Prefer [Searchable.fromDump](#searchablefromdump)
+when building a new instance.
 
 ---
-
-#### static merge
-
-```typescript
-static merge(indexes: Searchable[]): { search: (query: string) => string[] }
-```
-
-Creates a unified search interface over multiple Searchable instances.
-
-Results from all indexes are merged and deduplicated.
-
-**Parameters:**
-- `indexes` - Array of Searchable instances to merge
-
-**Returns:** Object with a `search` method that queries all indexes
-
-**Example:**
-```typescript
-const namesIndex = new Searchable({ defaultSearchOptions: { strategy: "prefix" } });
-const contentIndex = new Searchable({ defaultSearchOptions: { strategy: "fuzzy" } });
-
-namesIndex.add("John Lennon", "j");
-contentIndex.add("Imagine all the people", "j");
-
-const merged = Searchable.merge([namesIndex, contentIndex]);
-const results = merged.search("john");
-// returns: ["j"]
-```
 
 ### Properties
 
-#### wordCount
-
-```typescript
-get wordCount(): number
-```
-
-Returns the total number of unique words (including n-grams) in the index.
-
----
-
-#### lastQuery
-
-```typescript
-get lastQuery(): LastQuery
-```
-
-Returns metadata about the last search query performed on this instance.
-
----
-
-#### __index
-
-```typescript
-get __index(): Index
-```
-
-Access to the internal index instance (for debugging purposes).
+| Property | Type | Description |
+|---|---|---|
+| `wordCount` | `number` | Total unique words (including n-grams) in the index |
+| `docIdCount` | `number` | Total unique document IDs |
+| `lastQuery` | `LastQuery` | Shallow copy of the last-query metadata (see [LastQuery](#lastquery)) |
+| `__index` | `Index` | Access to the underlying concrete index (debugging) |
 
 ---
 
@@ -384,59 +247,74 @@ Access to the internal index instance (for debugging purposes).
 
 ### SearchableOptions
 
-Configuration options for the Searchable constructor.
-
 ```typescript
 interface SearchableOptions {
-  /** Should "Foo" and "foo" be distinct? (default: false) */
-  caseSensitive: boolean;
-
-  /** Should "cafe" and "café" be distinct? (default: false) */
-  accentSensitive: boolean;
-
-  /** Function to check if a word should be ignored (default: none) */
+  caseSensitive: boolean;        // default false
+  accentSensitive: boolean;      // default false
   isStopword: (word: string) => boolean;
-
-  /** Custom normalizer for stemming, aliases, etc. Can return array (default: noop) */
   normalizeWord: (word: string) => string | string[];
-
-  /** Which implementation: "inverted" or "trie" (default: "inverted") */
-  index: "inverted" | "trie";
-
-  /** Characters to include in words, not treat as boundaries (default: "@-") */
-  nonWordCharWhitelist: string;
-
-  /** N-gram sizes to generate, or 0 to disable (default: 0) */
-  ngramsSize: 0 | 3 | 4 | 5 | (3 | 4 | 5)[];
-
-  /** Minimum query word length required to trigger search (default: 1) */
-  querySomeWordMinLength: number;
-
-  /** Default search options */
+  index: "inverted" | "trie";    // default "inverted"
+  nonWordCharWhitelist: string;  // default "@-"
+  ngramsSize: 0 | 3 | 4 | 5 | (3 | 4 | 5)[];  // default 0
+  querySomeWordMinLength: number;  // default 1
   defaultSearchOptions: Partial<{
     strategy: "exact" | "prefix" | "fuzzy";
     maxDistance: number;
+    limit: number;
+    offset: number;
+    distanceFn: DistanceFn;
   }>;
+  lastQueryHistoryLength: number;  // default 5
+}
+```
 
-  /** Number of queries to keep in history (default: 5) */
-  lastQueryHistoryLength: number;
+Note: `normalizeWord` runs at BOTH index and query time since v2.5.0.
+
+### SearchOptions
+
+```typescript
+interface SearchOptions {
+  maxDistance?: number;   // fuzzy only; default 2
+  limit?: number;         // cap returned results
+  offset?: number;        // skip first N results
+  distanceFn?: DistanceFn; // override Levenshtein for fuzzy
+}
+
+type DistanceFn = (a: string, b: string) => number;
+```
+
+### QueryExplanation
+
+```typescript
+interface QueryExplanation {
+  raw: string;
+  normalized: string;
+  tokens: string[];
+  afterStopwords: string[];
+  groups: string[][];    // after normalizeWord expansion
+  wouldSearch: boolean;  // false if querySomeWordMinLength gates it
 }
 ```
 
 ### LastQuery
 
-Metadata about the last search query.
-
 ```typescript
 interface LastQuery {
-  /** History of "used" queries */
-  history: string[];
-
-  /** Last raw query input (even empty string) */
+  history: string[];      // post-normalization queries
+  rawHistory: string[];   // pre-normalization user input (same length/order)
   raw: string | undefined;
-
-  /** Last query truly used (after querySomeWordMinLength applied) */
   used: string | undefined;
+}
+```
+
+### MergedSearchable
+
+```typescript
+interface MergedSearchable {
+  search(query: string, options?: SearchOptions): string[];
+  searchExact(query: string, options?: SearchOptions): string[];
+  searchByPrefix(query: string, options?: SearchOptions): string[];
+  searchFuzzy(query: string, maxDistance?: number, options?: SearchOptions): string[];
 }
 ```
 
@@ -444,46 +322,27 @@ interface LastQuery {
 
 ## Index Implementations
 
-Both implementations extend the abstract `Index` class and provide the same API.
+Both implementations extend the abstract `Index` class and expose the same API.
 
 ### InvertedIndex
 
-Hash map based inverted index implementation using word-to-document mapping.
+Hash-map based inverted index using `Map<word, Set<docId>>`.
 
-**Characteristics:**
-- O(1) exact word lookups
-- O(n) prefix search (iterates all words)
-- Better memory efficiency
-- Default and recommended for most use cases
-
-```typescript
-import { InvertedIndex } from '@marianmeres/searchable';
-
-const index = new InvertedIndex();
-index.addWord("hello", "doc1");
-index.searchExact("hello"); // ["doc1"]
-```
+- O(1) exact lookups.
+- Prefix / fuzzy scan the whole word list.
+- Lower memory overhead.
 
 ### TrieIndex
 
-Trie (prefix tree) based index implementation.
+Trie (prefix tree) based index.
 
-**Characteristics:**
-- O(k) prefix search where k = prefix length
-- Ideal for autocomplete and typeahead
-- Higher memory overhead
-- Recommended for prefix-heavy workloads
+- O(k) prefix descent (k = prefix length).
+- Fuzzy search walks the trie with a rolling Levenshtein row and prunes
+  subtrees whose row minimum exceeds `maxDistance` — dramatically faster
+  than a linear scan on non-trivial vocabularies (v2.5.0+).
+- Slightly higher memory footprint.
 
-```typescript
-import { TrieIndex } from '@marianmeres/searchable';
-
-const index = new TrieIndex();
-index.addWord("hello", "doc1");
-index.addWord("help", "doc2");
-index.searchByPrefix("hel"); // ["doc1", "doc2"]
-```
-
-### Index Methods (both implementations)
+### Index methods (both implementations)
 
 ```typescript
 // Properties
@@ -493,6 +352,7 @@ get docIdCount(): number
 // Data access
 getAllWords(): string[]
 getAllDocIds(): string[]
+hasDocId(docId: string): boolean
 
 // Mutations
 addWord(word: string, docId: string): boolean
@@ -506,10 +366,19 @@ searchByPrefix(prefix: string, returnWithDistance: true): Record<string, number>
 searchByDocId(docId: string): string[]
 searchFuzzy(word: string, maxDistance?: number): string[]
 searchFuzzy(word: string, maxDistance: number, returnWithDistance: true): Record<string, number>
+searchFuzzy(word: string, maxDistance: number, returnWithDistance: boolean, options: FuzzyOptions): string[] | Record<string, number>
 
 // Persistence
-dump(): { version?: string; words: Record<string, string[]> }
+dump(): { version: string; words: Record<string, string[]> }
 restore(data: string | object): boolean
+```
+
+Where:
+
+```typescript
+interface FuzzyOptions {
+  distanceFn?: DistanceFn;
+}
 ```
 
 ---
@@ -522,22 +391,14 @@ restore(data: string | object): boolean
 tokenize(inputString: string, nonWordCharWhitelist?: string): string[]
 ```
 
-Splits a string into words using Unicode-aware word boundaries.
+Splits a string into words using Unicode-aware word boundaries
+(`\p{L}`, `\p{N}`, `\p{Pc}` + whitelist).
 
-**Parameters:**
-- `inputString` - The string to tokenize
-- `nonWordCharWhitelist` - Characters to treat as part of words (default: `""`)
-
-**Example:**
 ```typescript
-import { tokenize } from '@marianmeres/searchable';
-
-tokenize("Hello, World!"); // ["Hello", "World"]
-tokenize("user@example.com", "@"); // ["user@example.com"]
-tokenize("well-known", "-"); // ["well-known"]
+tokenize('Hello, World!');            // ['Hello', 'World']
+tokenize('user@example.com', '@');    // ['user@example.com']
+tokenize('well-known', '-');          // ['well-known']
 ```
-
----
 
 ### normalize
 
@@ -545,23 +406,7 @@ tokenize("well-known", "-"); // ["well-known"]
 normalize(input: string, options?: { caseSensitive?: boolean; accentSensitive?: boolean }): string
 ```
 
-Creates a normalized version of the input string.
-
-**Parameters:**
-- `input` - The string to normalize
-- `options.caseSensitive` - If false, converts to lowercase (default: `false`)
-- `options.accentSensitive` - If false, removes accents (default: `false`)
-
-**Example:**
-```typescript
-import { normalize } from '@marianmeres/searchable';
-
-normalize("  Café  "); // "cafe"
-normalize("Café", { caseSensitive: true }); // "Cafe"
-normalize("Café", { accentSensitive: true }); // "café"
-```
-
----
+Trims, optionally lowercases, optionally strips accents (via `unaccent`).
 
 ### unaccent
 
@@ -569,66 +414,54 @@ normalize("Café", { accentSensitive: true }); // "café"
 unaccent(input: string): string
 ```
 
-Removes diacritical marks (accents) from a string using Unicode NFD decomposition.
+Removes diacritical marks via Unicode NFD + combining-mark strip **and**
+folds a curated set of precomposed letters (`ß → ss`, `ø → o`, `æ → ae`,
+`œ → oe`, `đ → d`, `ł → l`, `þ → th`, `ð → d`, `ı → i`, ...).
 
-**Example:**
 ```typescript
-import { unaccent } from '@marianmeres/searchable';
-
-unaccent("café"); // "cafe"
-unaccent("São Paulo"); // "Sao Paulo"
-unaccent("crème brûlée"); // "creme brulee"
+unaccent('café');     // 'cafe'
+unaccent('straße');   // 'strasse'
+unaccent('København'); // 'Kobenhavn'
+unaccent('łódź');     // 'lodz'
 ```
-
----
 
 ### levenshteinDistance
 
 ```typescript
-levenshteinDistance(source: string, target: string): number
+levenshteinDistance(
+  source: string,
+  target: string,
+  options?: { damerau?: boolean }
+): number
 ```
 
-Calculates the Levenshtein distance (edit distance) between two strings.
+Edit distance between two strings.
 
-**Parameters:**
-- `source` - The source string
-- `target` - The target string
+- Iterates over Unicode code points, so astral characters (emoji, many CJK)
+  count as single characters.
+- Uses rolling rows — O(min(m,n)) space.
+- With `damerau: true`, adjacent transpositions (`teh ↔ the`) count as a
+  single edit.
 
-**Returns:** The minimum number of single-character edits needed
-
-**Example:**
 ```typescript
-import { levenshteinDistance } from '@marianmeres/searchable';
-
-levenshteinDistance("cat", "hat"); // 1
-levenshteinDistance("hello", "helo"); // 1
-levenshteinDistance("restaurant", "resturant"); // 2
+levenshteinDistance('cat', 'hat');                           // 1
+levenshteinDistance('teh', 'the');                           // 2
+levenshteinDistance('teh', 'the', { damerau: true });        // 1
+levenshteinDistance('😀cat', '😀cats');                      // 1
 ```
-
----
 
 ### createNgrams
 
 ```typescript
-createNgrams(normalizedText: string, size?: number, options?: { padChar?: string }): string[]
+createNgrams(
+  normalizedText: string,
+  size?: number,
+  options?: { padChar?: string }
+): string[]
 ```
 
-Generates character n-grams from an input string.
-
-**Parameters:**
-- `normalizedText` - The input string (should be pre-normalized)
-- `size` - The n-gram size (default: 3)
-- `options.padChar` - Padding character, empty string disables padding (default: `" "`)
-
-**Example:**
-```typescript
-import { createNgrams } from '@marianmeres/searchable';
-
-createNgrams("hello", 3); // ["  h", " he", "hel", "ell", "llo", "lo ", "o  "]
-createNgrams("hello", 3, { padChar: "" }); // ["hel", "ell", "llo"]
-```
-
----
+Generates character n-grams of length `size`. Padding defaults to `" "` (n-1
+on each side); pass `padChar: ""` to disable padding.
 
 ### intersect
 
@@ -637,12 +470,3 @@ intersect<T>(...arrays: (readonly T[])[]): T[]
 ```
 
 Returns all distinct elements that appear in every input array.
-
-**Example:**
-```typescript
-import { intersect } from '@marianmeres/searchable';
-
-const a = ["Cooking", "Music", "Hiking"];
-const b = ["Music", "Tennis", "Cooking"];
-intersect(a, b); // ["Cooking", "Music"]
-```

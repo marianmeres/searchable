@@ -1,4 +1,5 @@
 export * from "./intersect.ts";
+export * from "./index-abstract.ts";
 export * from "./index-inverted.ts";
 export * from "./levenshtein.ts";
 export * from "./ngram.ts";
