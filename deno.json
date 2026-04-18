@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/searchable",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "exports": "./src/mod.ts",
   "tasks": {
     "test": "deno test",
