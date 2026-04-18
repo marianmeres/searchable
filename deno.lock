@@ -2,6 +2,8 @@
   "version": "5",
   "specifiers": {
     "jsr:@marianmeres/npmbuild@^1.12.0": "1.12.0",
+    "jsr:@marianmeres/pubsub@3": "3.0.0",
+    "jsr:@marianmeres/store@3": "3.0.0",
     "jsr:@std/assert@^1.0.19": "1.0.19",
     "jsr:@std/collections@^1.1.6": "1.1.6",
     "jsr:@std/fs@^1.0.23": "1.0.23",
@@ -16,6 +18,15 @@
         "jsr:@std/collections",
         "jsr:@std/fs",
         "jsr:@std/path"
+      ]
+    },
+    "@marianmeres/pubsub@3.0.0": {
+      "integrity": "9bc40e60362801663fb23e0c00a353abec7684840b6bea410facba09c083677b"
+    },
+    "@marianmeres/store@3.0.0": {
+      "integrity": "cf848628bf2a39532426c3e37f865ab6307d7e8b3e53603cf86abb77554363e7",
+      "dependencies": [
+        "jsr:@marianmeres/pubsub"
       ]
     },
     "@std/assert@1.0.19": {
@@ -1199,6 +1210,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@marianmeres/npmbuild@^1.12.0",
+      "jsr:@marianmeres/store@3",
       "jsr:@std/assert@^1.0.19",
       "jsr:@std/fs@^1.0.23",
       "jsr:@std/path@^1.1.4"

@@ -5,12 +5,9 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Searchable demo</title>
 		<link
-			href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"
+			href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
 			rel="stylesheet"
-			integrity="sha384-Zenh87qX5JnK2Jl0vWa8Ck2rdkQ2Bzep5IDxbcnCeuOxjzrPF/et3URy9Bv1WTRi"
-			crossorigin="anonymous"
 		/>
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
 		<style>
 			body {
 				padding: 2rem;
@@ -23,44 +20,28 @@
 				color: black;
 				font-weight: bold;
 			}
-			#console .year {
+			#console .year,
+			#console .genres,
+			#console .cast {
 				color: black;
 			}
-			#console .genres {
-				color: black;
+			.controls {
+				display: flex;
+				align-items: center;
+				flex-wrap: wrap;
+				gap: 0.25rem 1rem;
+			}
+			.controls label {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.35rem;
+				margin: 0;
+			}
+			.controls input[type="radio"],
+			.controls input[type="checkbox"] {
+				margin: 0;
 			}
 		</style>
-		<script>
-			function qsa(selector, context = null) {
-				return Array.from(
-					(context ?? document)?.querySelectorAll(selector) || []
-				);
-			}
-
-			function debounce(fn, wait) {
-				let timeout = null;
-				return function (...args) {
-					const context = this;
-					if (timeout !== null) clearTimeout(timeout);
-					timeout = setTimeout(() => fn.apply(context, args), wait);
-				};
-			}
-
-			function getSelectedRadioValue(nameOrList) {
-				let selectedValue = "";
-				const radios =
-					typeof nameOrList === "string"
-						? qsa(`input[name="${nameOrList}"]`)
-						: nameOrList;
-				for (const radioButton of nameOrList) {
-					if (radioButton.checked) {
-						selectedValue = radioButton.value;
-						break;
-					}
-				}
-				return selectedValue;
-			}
-		</script>
 	</head>
 	<body>
 		<div class="d-flex flex-column" style="height: 100%; background: white">
@@ -81,26 +62,28 @@
 					class="form-control"
 					id="query"
 					placeholder="Type your query here..."
+					disabled
 				/>
 				<label for="query">Start typing your query here...</label>
 			</div>
 
-			<div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
-				Search:
+			<div class="controls mb-3">
+				<span>Search:</span>
 				<label>
 					<input type="radio" name="strategy" value="exact" />
-					exact
+					<span>exact</span>
 				</label>
-
 				<label>
 					<input type="radio" name="strategy" value="prefix" checked />
-					by prefix
+					<span>by prefix</span>
 				</label>
-
 				<label>
 					<input type="radio" name="strategy" value="fuzzy" />
-					fuzzy
-					<small class="text-muted"> (max Levenshtein dist. 2) </small>
+					<span>fuzzy <small class="text-muted">(max Levenshtein dist. 2)</small></span>
+				</label>
+				<label>
+					<input type="checkbox" id="accent-sensitive" />
+					<span>accent-sensitive</span>
 				</label>
 			</div>
 
@@ -122,116 +105,6 @@
 				>.
 			</p>
 		</div>
-		<script type="module">
-			import { Searchable } from "./dist/searchable.js";
-			import { createStore } from "./node_modules/@marianmeres/store/dist/index.js";
-			const qsa = window.qsa;
-			const debouce = window.debounce;
-			const getSelectedRadioValue = window.getSelectedRadioValue;
-			// import movies from "./movies.json" assert { type: "json" };
-
-			fetch("./movies.json")
-				.then((response) => response.json())
-				.then((movies) => init(movies))
-				.catch((error) => {
-					console.error(error);
-					alert("Unable to initialize :-(");
-				});
-
-			const initialized = createStore(false);
-			const index = new Searchable({ ngramsSize: 0 });
-			let docs = {};
-
-			function init(movies) {
-				docs = movies;
-				Object.entries(movies).forEach(([id, movie]) => {
-					const search = [
-						movie.title,
-						// movie.tagline,
-						// movie.overview,
-						movie.year,
-						movie.characters.join(),
-						movie.genres.join(),
-						movie.actors.join(),
-						movie.directors.join(),
-					].join(" ");
-					index.add(search, `${id}`);
-				});
-
-				initialized.set(true);
-			}
-
-			const $log = qsa("#console")[0];
-			const $input = qsa("#query")[0];
-			const $strategyRadios = qsa('input[name="strategy"]');
-
-			initialized.subscribe((v) => {
-				// console.log("initialized", v);
-				$input.disabled = !v;
-				if (v) {
-					$log.innerHTML =
-						"Movie data loaded. Type your movie search query in the input above.";
-				}
-			});
-
-			const search = debounce((v) => {
-				const strategy = getSelectedRadioValue($strategyRadios);
-				const start = Date.now();
-				const docIds = index.search(v, strategy);
-				render(docIds, Date.now() - start);
-			}, 100);
-
-			$input.addEventListener("input", (e) => search(e.target.value));
-
-			$strategyRadios.forEach((radio) => {
-				radio.addEventListener("change", () => {
-					search($input.value);
-				});
-			});
-
-			const render = (docIds, duration) => {
-				const results = (docIds || []).reduce((m, docId) => {
-					m.push(docs[docId]);
-					return m;
-				}, []);
-				let out = results
-					.map((m) => {
-						let actChar = m.actors
-							.reduce((memo, v, i) => {
-								memo.push(`${v} (${m.characters[i]})`);
-								return memo;
-							}, [])
-							.join(", ");
-						return [
-							`&rarr; `,
-							`<span class="title">${m.title}</span> `,
-							`<span class="year">(${m.year}, ${m.directors.join(
-								", "
-							)})</span> `,
-							`<span class="genres">/ ${m.genres.join(", ")}</span> `,
-							`<br/><span class="tagline">${actChar}</span> `,
-							//`<br/><span class="tagline">${m.tagline}</span> `,
-							//`<span class="overview">&mdash; ${m.overview}</span> `,
-							`<br/>`,
-						].join("");
-					})
-					.slice(0, 1000);
-
-				if (results.length > 1000) {
-					out.push(
-						`\n<span style="color: gray;">...next ${
-							results.length - 1000
-						} results omitted...</span>`
-					);
-				}
-
-				// let dur = "";
-				// if (duration) {
-				let dur = `(Found ${results.length} matching out of ~2500 total records in ${duration} ms)<br/><br/>`;
-				// }
-
-				$log.innerHTML = dur + out.join("<br />");
-			};
-		</script>
+		<script type="module" src="./dist/app.js"></script>
 	</body>
 </html>

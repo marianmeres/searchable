@@ -5,7 +5,7 @@
   "tasks": {
     "test": "deno test",
     "test:watch": "deno test --watch",
-    "example:build": "deno run -A jsr:@marianmeres/deno-build --outdir ./example/dist --outfile searchable.js",
+    "example:build": "deno run -A jsr:@marianmeres/deno-build --root example/src --entry app.ts --outdir ./example/dist --outfile app.js",
     "npm:build": "deno run -A scripts/build-npm.ts",
     "npm:publish": "deno run -A scripts/build-npm.ts && cd ./.npm-dist && npm publish --access=public",
     "release": "deno run -A jsr:@marianmeres/deno-release",
@@ -15,6 +15,7 @@
   },
   "imports": {
     "@marianmeres/npmbuild": "jsr:@marianmeres/npmbuild@^1.12.0",
+    "@marianmeres/store": "jsr:@marianmeres/store@^3",
     "@std/assert": "jsr:@std/assert@^1.0.19",
     "@std/fs": "jsr:@std/fs@^1.0.23",
     "@std/path": "jsr:@std/path@^1.1.4"
