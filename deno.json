@@ -5,7 +5,7 @@
   "tasks": {
     "test": "deno test",
     "test:watch": "deno test --watch",
-    "example:build": "deno run -A jsr:@marianmeres/deno-build --root example/src --entry app.ts --outdir ./example/dist --outfile app.js",
+    "example:build": "deno run -A jsr:@marianmeres/deno-build --esbuild --root example/src --entry app.ts --outdir ./example/dist --outfile app.js",
     "npm:build": "deno run -A scripts/build-npm.ts",
     "npm:publish": "deno run -A scripts/build-npm.ts && cd ./.npm-dist && npm publish --access=public",
     "release": "deno run -A jsr:@marianmeres/deno-release",
