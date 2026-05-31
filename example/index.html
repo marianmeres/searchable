@@ -2,109 +2,381 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Searchable demo</title>
-		<link
-			href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-			rel="stylesheet"
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1, viewport-fit=cover"
 		/>
+		<title>@marianmeres/searchable — example</title>
+		<meta
+			name="description"
+			content="In-memory text search — autocomplete, filtering, and fuzzy matching, demoed over ~2500 movies."
+		/>
+		<!-- Tracks the active (manually toggled) theme; updated by main.ts. -->
+		<meta name="theme-color" content="#fafafa" />
+		<link
+			rel="icon"
+			href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%2210 0 100 100%22><text y=%22.90em%22 font-size=%2290%22>🔎</text></svg>"
+		/>
+
+		<!--
+			Styling follows @marianmeres/design-tokens with the Reboot bridge:
+			  · reboot.css — Bootstrap Reboot element normalize/reset (consumes --bs-*)
+			  · theme.css  — design-tokens "zinc" theme + reboot bridge
+			                 (sets --stuic-color-* AND the --bs-* vars; dark on :root.dark)
+			  · the inline block below — minimal, token-driven example layout
+		-->
+		<link rel="stylesheet" href="./reboot.css" />
+		<link rel="stylesheet" href="./theme.css" />
+
+		<!--
+			Anti-FOUC: set the dark class before first paint so dark-preference
+			users don't flash light. main.ts re-confirms this idempotently.
+			The storage key must match THEME_KEY in main.ts.
+		-->
+		<script>
+			try {
+				var k = "searchable-example-theme";
+				var s = localStorage.getItem(k);
+				var d = s ? s === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+				document.documentElement.classList.toggle("dark", d);
+			} catch (e) {}
+		</script>
+
 		<style>
+			:root {
+				color-scheme: light;
+			}
+			:root.dark {
+				color-scheme: dark;
+			}
+			html,
 			body {
-				padding: 2rem;
-				height: 100vh;
+				height: 100%;
 			}
-			#console {
-				color: gray;
+			body {
+				min-height: 100vh;
+				min-height: 100dvh;
 			}
-			#console .title {
-				color: black;
-				font-weight: bold;
-			}
-			#console .year,
-			#console .genres,
-			#console .cast {
-				color: black;
-			}
-			.controls {
+
+			/* App shell: a viewport-tall flex column. The top region (header +
+			   search + controls + status) and the footer stay put; only the
+			   results region in between scrolls. */
+			.app {
 				display: flex;
-				align-items: center;
-				flex-wrap: wrap;
-				gap: 0.25rem 1rem;
+				flex-direction: column;
+				height: 100vh;
+				height: 100dvh;
+				max-width: 48rem;
+				margin: 0 auto;
+				padding: clamp(1rem, 4vw, 2.5rem) clamp(1rem, 4vw, 2rem);
 			}
-			.controls label {
+			.app-top {
+				flex: none;
+			}
+			.results-scroll {
+				flex: 1 1 auto;
+				min-height: 0; /* let the flex item shrink so it can scroll */
+				overflow-y: auto;
+				overscroll-behavior: contain;
+				-webkit-overflow-scrolling: touch;
+				padding-bottom: 0.5rem;
+			}
+
+			.app-header {
+				display: flex;
+				align-items: flex-start;
+				justify-content: space-between;
+				gap: 1rem;
+				margin-bottom: 1.5rem;
+			}
+			.app-header h1 {
+				margin: 0 0 0.3rem;
+				font-size: 1.05rem;
+				font-weight: 600;
+				line-height: 1.3;
+			}
+			.app-header h1 a {
+				color: inherit;
+				text-decoration: none;
+			}
+			.app-header h1 code {
+				color: inherit;
+				font-size: 0.95em;
+			}
+			.lead {
+				max-width: 60ch;
+				margin: 0;
+				color: var(--stuic-color-muted-foreground);
+				font-size: 0.9rem;
+			}
+
+			.theme-toggle {
+				flex: none;
+				width: 2.75rem;
+				height: 2.75rem;
 				display: inline-flex;
 				align-items: center;
-				gap: 0.35rem;
-				margin: 0;
+				justify-content: center;
+				border: 1px solid var(--stuic-color-border);
+				border-radius: 0.5rem;
+				background: var(--stuic-color-surface);
+				color: var(--stuic-color-surface-foreground);
+				font-size: 1.1rem;
+				line-height: 1;
+				cursor: pointer;
 			}
-			.controls input[type="radio"],
-			.controls input[type="checkbox"] {
+			.theme-toggle:hover {
+				background: var(--stuic-color-surface-hover);
+			}
+
+			/* 1rem (16px) font keeps iOS Safari from zooming in on focus. */
+			.search-input {
+				width: 100%;
+				font: inherit;
+				font-size: 1rem;
+				min-height: 3rem;
+				padding: 0.7rem 0.9rem;
+				margin-bottom: 1rem;
+				border: 1px solid var(--stuic-color-border);
+				border-radius: 0.6rem;
+				background: var(--stuic-color-input);
+				color: var(--stuic-color-foreground);
+			}
+			.search-input::placeholder {
+				color: var(--stuic-color-muted-foreground);
+			}
+			.search-input:disabled {
+				opacity: 0.6;
+				cursor: not-allowed;
+			}
+
+			.controls {
+				display: flex;
+				flex-wrap: wrap;
+				align-items: center;
+				justify-content: space-between;
+				gap: 0.75rem 1rem;
+				margin-bottom: 1.25rem;
+			}
+
+			/* Segmented strategy picker — radios styled as a button group. */
+			.segmented {
+				display: inline-flex;
+				gap: 0.2rem;
+				padding: 0.2rem;
+				border: 1px solid var(--stuic-color-border);
+				border-radius: 0.55rem;
+				background: var(--stuic-color-surface);
+			}
+			.seg input {
+				position: absolute;
+				opacity: 0;
+				pointer-events: none;
+			}
+			.seg span {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				min-height: 2.25rem;
+				padding: 0 0.9rem;
+				border-radius: 0.4rem;
+				font-size: 0.85rem;
+				color: var(--stuic-color-muted-foreground);
+				white-space: nowrap;
+				cursor: pointer;
+				user-select: none;
+			}
+			.seg:has(input:checked) span {
+				background: var(--stuic-color-background);
+				color: var(--stuic-color-foreground);
+				box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+			}
+			.seg:has(input:focus-visible) span {
+				outline: 2px solid var(--stuic-color-primary);
+				outline-offset: 2px;
+			}
+
+			.switch {
+				display: inline-flex;
+				align-items: center;
+				gap: 0.5rem;
+				min-height: 2.75rem;
+				font-size: 0.85rem;
+				cursor: pointer;
+				user-select: none;
+			}
+			.switch input {
+				width: 1.15rem;
+				height: 1.15rem;
+				accent-color: var(--stuic-color-primary);
+				cursor: pointer;
+			}
+
+			.status {
+				margin: 0 0 1rem;
+				color: var(--stuic-color-muted-foreground);
+				font-size: 0.8rem;
+				font-variant-numeric: tabular-nums;
+				min-height: 1.2em;
+			}
+			.status--error {
+				color: var(--stuic-color-destructive);
+			}
+
+			.results {
+				list-style: none;
 				margin: 0;
+				padding: 0;
+				display: grid;
+				gap: 0.5rem;
+			}
+			.result {
+				padding: 0.75rem 0.9rem;
+				border: 1px solid var(--stuic-color-border);
+				border-radius: 0.5rem;
+				background: var(--stuic-color-surface);
+				color: var(--stuic-color-surface-foreground);
+			}
+			.result-title {
+				margin: 0;
+				font-weight: 600;
+				font-size: 0.95rem;
+			}
+			.result-meta {
+				margin: 0.15rem 0 0;
+				font-size: 0.8rem;
+				color: var(--stuic-color-muted-foreground);
+			}
+			.result-cast {
+				margin: 0.25rem 0 0;
+				font-size: 0.8rem;
+				font-style: italic;
+				color: var(--stuic-color-muted-foreground);
+			}
+
+			.results-empty {
+				margin: 0;
+				padding: 1.5rem 0.75rem;
+				border: 1px dashed var(--stuic-color-border);
+				border-radius: 0.5rem;
+				text-align: center;
+				color: var(--stuic-color-muted-foreground);
+			}
+
+			.info {
+				flex: none;
+				margin: 0;
+				padding-top: 0.85rem;
+				border-top: 1px solid var(--stuic-color-border);
+				color: var(--stuic-color-muted-foreground);
+				font-size: 0.8rem;
+				line-height: 1.6;
+			}
+			.info a {
+				color: inherit;
+				text-decoration: underline;
+			}
+
+			:where(.search-input, .theme-toggle, .switch input):focus-visible {
+				outline: 2px solid var(--stuic-color-primary);
+				outline-offset: 2px;
 			}
 		</style>
 	</head>
 	<body>
-		<div class="d-flex flex-column" style="height: 100%; background: white">
-			<h1 class="mb-3"><code>@marianmeres/searchable</code> example</h1>
-			<p>
-				See
-				<a href="https://github.com/marianmeres/searchable">
-					https://github.com/marianmeres/searchable
-				</a>
-				for more info.
-			</p>
-			<div
-				class="form-floating mb-3 p-1 rounded"
-				style="background: lightskyblue"
-			>
-				<input
-					type="text"
-					class="form-control"
-					id="query"
-					placeholder="Type your query here..."
-					disabled
-				/>
-				<label for="query">Start typing your query here...</label>
-			</div>
+		<!-- The whole UI lives in templates; main.ts clones and wires them. -->
+		<template id="tpl-app">
+			<div class="app">
+				<div class="app-top">
+					<header class="app-header">
+						<div>
+							<h1>
+								<a href="https://github.com/marianmeres/searchable">
+									<code>@marianmeres/searchable</code>
+								</a>
+							</h1>
+							<p class="lead">
+								In-memory text search — autocomplete, filtering, and
+								fuzzy matching. Try it live over ~2500 movies below.
+							</p>
+						</div>
+						<button
+							type="button"
+							class="theme-toggle"
+							data-on="click:toggleTheme"
+							aria-label="Toggle dark mode"
+							title="Toggle dark mode"
+						>◐</button>
+					</header>
 
-			<div class="controls mb-3">
-				<span>Search:</span>
-				<label>
-					<input type="radio" name="strategy" value="exact" />
-					<span>exact</span>
-				</label>
-				<label>
-					<input type="radio" name="strategy" value="prefix" checked />
-					<span>by prefix</span>
-				</label>
-				<label>
-					<input type="radio" name="strategy" value="fuzzy" />
-					<span>fuzzy <small class="text-muted">(max Levenshtein dist. 2)</small></span>
-				</label>
-				<label>
-					<input type="checkbox" id="accent-sensitive" />
-					<span>accent-sensitive</span>
-				</label>
-			</div>
+					<input
+						type="text"
+						class="search-input"
+						data-ref="query"
+						data-on="input:setQuery"
+						placeholder="Search titles, actors, directors, genres…"
+						autocomplete="off"
+						autocapitalize="off"
+						autocorrect="off"
+						spellcheck="false"
+						enterkeyhint="search"
+						aria-label="Search query"
+						disabled
+					/>
 
-			<div
-				class="flex-fill mb-0 font-monospace small"
-				id="console"
-				style="overflow-y: auto; background: rgb(240, 240, 240); padding: 1rem"
-			>
-				Please wait...
+					<div class="controls">
+						<div class="segmented" role="radiogroup" aria-label="Search strategy">
+							<label class="seg">
+								<input type="radio" name="strategy" value="exact" data-on="change:setStrategy" />
+								<span>Exact</span>
+							</label>
+							<label class="seg">
+								<input type="radio" name="strategy" value="prefix" checked data-on="change:setStrategy" />
+								<span>Prefix</span>
+							</label>
+							<label class="seg">
+								<input type="radio" name="strategy" value="fuzzy" data-on="change:setStrategy" />
+								<span>Fuzzy</span>
+							</label>
+						</div>
+						<label class="switch">
+							<input type="checkbox" data-ref="accent" data-on="change:setAccent" />
+							<span>Accent-sensitive</span>
+						</label>
+					</div>
+
+					<p class="status" data-ref="status" role="status" aria-live="polite">
+						Loading movie data…
+					</p>
+				</div>
+
+				<div class="results-scroll" data-ref="scroll">
+					<ul class="results" data-ref="results" aria-label="Search results"></ul>
+					<p class="results-empty" data-ref="empty" hidden>
+						No movies matched your query. Try the fuzzy strategy, or a shorter term.
+					</p>
+				</div>
+
+				<footer class="info">
+					Dataset from
+					<a href="https://github.com/bbrumm/databasestar" target="_blank" rel="noopener">
+						databasestar.com</a>. Everything runs locally in your
+					browser — nothing is sent anywhere.
+					<span data-ref="version"></span>
+				</footer>
 			</div>
-			<p class="small text-muted mt-3 mb-0">
-				Dataset from
-				<a
-					class="text-muted"
-					href="https://github.com/bbrumm/databasestar"
-					target="_blank"
-				>
-					databasestar.com</a
-				>.
-			</p>
-		</div>
-		<script type="module" src="./dist/app.js"></script>
+		</template>
+
+		<template id="tpl-result">
+			<li class="result">
+				<p class="result-title" data-ref="title"></p>
+				<p class="result-meta" data-ref="meta"></p>
+				<p class="result-cast" data-ref="cast"></p>
+			</li>
+		</template>
+
+		<div id="app"></div>
+
+		<script type="module" src="./dist/bundle.js"></script>
 	</body>
 </html>
