@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
-import { TrieIndex } from "../src/lib/index-trie.ts";
+import { assertEquals, assertThrows } from "@std/assert";
+import { DEFAULT_TERMINAL_MARKER, TrieIndex } from "../src/lib/index-trie.ts";
 
 Deno.test("trie sanity check", () => {
 	const idx = new TrieIndex();
@@ -124,4 +124,51 @@ Deno.test("char trie", () => {
 	};
 
 	assertEquals(idx.__toCharTrie(), expected);
+	// toCharTrie() with no options must be byte-identical to the legacy helper.
+	assertEquals(idx.toCharTrie(), expected);
+	assertEquals(idx.toCharTrie(), idx.__toCharTrie());
+});
+
+Deno.test("char trie - terminal marker", () => {
+	const EOW = DEFAULT_TERMINAL_MARKER;
+	const idx = new TrieIndex();
+	idx.addWord("bar", "1");
+	idx.addWord("barn", "2");
+
+	// Char-only projection cannot tell "bar" (a word) from a prefix of "barn".
+	assertEquals(idx.toCharTrie(), {
+		b: { a: { r: { n: {} } } },
+	});
+
+	// With the default sentinel, word-final nodes are marked.
+	assertEquals(idx.toCharTrie({ terminalMarker: true }), {
+		b: { a: { r: { [EOW]: true, n: { [EOW]: true } } } },
+	});
+
+	// A custom (>= 2 code point) sentinel works too.
+	assertEquals(idx.toCharTrie({ terminalMarker: "·eow" }), {
+		b: { a: { r: { "·eow": true, n: { "·eow": true } } } },
+	});
+});
+
+Deno.test("char trie - terminal marker on a word that is a prefix of another", () => {
+	const EOW = DEFAULT_TERMINAL_MARKER;
+	const idx = new TrieIndex();
+	idx.addWord("ba", "1");
+	idx.addWord("bar", "2");
+
+	// "ba" is both a complete word AND an interior node with child "r".
+	assertEquals(idx.toCharTrie({ terminalMarker: true }), {
+		b: { a: { [EOW]: true, r: { [EOW]: true } } },
+	});
+});
+
+Deno.test("char trie - invalid sentinel throws", () => {
+	const idx = new TrieIndex();
+	idx.addWord("foo", "1");
+
+	// Single code point could collide with a real edge -> rejected.
+	assertThrows(() => idx.toCharTrie({ terminalMarker: "$" }));
+	// A single emoji is one code point (even though .length === 2) -> rejected.
+	assertThrows(() => idx.toCharTrie({ terminalMarker: "😀" }));
 });

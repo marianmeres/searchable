@@ -110,6 +110,29 @@ const dump = index.dump();                                    // string
 const restored = Searchable.fromDump(dump, { index: 'trie' }); // can switch index type
 ```
 
+### Export the trie as a nested object
+The trie index can project itself into a plain nested object (each key is one
+character, leaves are `{}`) — handy for serializing into a store that can query
+nested JSON, e.g. a Postgres JSONB column for SQL-side prefix matching.
+
+```ts
+import { Searchable, TrieIndex } from '@marianmeres/searchable';
+
+const index = new Searchable({ index: 'trie' });
+index.add('bar barn', 'doc1');
+const trie = index.__index as TrieIndex;
+
+trie.toCharTrie();
+// { b: { a: { r: { n: {} } } } }   // is "bar" a word, or just a prefix? Ambiguous.
+
+trie.toCharTrie({ terminalMarker: true });
+// { b: { a: { r: { "$$": true, n: { "$$": true } } } } }
+//                  └ "bar" is a word    └ "barn" is a word
+```
+
+The optional `terminalMarker` adds an end-of-word sentinel so you can tell a
+complete word (`bar`) from a prefix of another (`barn`). See [API.md](API.md#tochartrie).
+
 ### Debug the pipeline
 ```ts
 index.explainQuery('The Hello World!');

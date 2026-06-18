@@ -161,6 +161,18 @@ interface FuzzyOptions { distanceFn?: DistanceFn }
 
 class InvertedIndex extends Index  // Hash map based, O(1) exact lookup
 class TrieIndex extends Index      // Trie, O(k) prefix, trie-walked fuzzy w/ pruning
+
+// TrieIndex-only: project the trie into a nested plain object (e.g. for JSONB export).
+// Each key is one code point, leaves are {}. Optional end-of-word sentinel marks
+// word-final nodes so a complete word ("bar") is distinguishable from a prefix ("barn").
+class TrieIndex {
+  toCharTrie(options?: CharTrieOptions): Record<string, any>
+  __toCharTrie(): Record<string, any>  // @deprecated byte-compatible alias (char-only)
+}
+interface CharTrieOptions {
+  terminalMarker?: boolean | string  // false (default) | true → "$$" | custom (≥2 code points)
+}
+const DEFAULT_TERMINAL_MARKER = "$$"
 ```
 
 ### Utility Functions
@@ -309,6 +321,13 @@ idx.explainQuery("The Hello World!");
 ```typescript
 const merged = Searchable.merge([idx1, idx2]);
 merged.searchByPrefix("query", { limit: 10 });
+```
+
+### Export trie to nested object (e.g. JSONB)
+```typescript
+const trie = idx.__index as TrieIndex;       // requires index: "trie"
+trie.toCharTrie();                           // { b: { a: { r: { n: {} } } } } (char-only)
+trie.toCharTrie({ terminalMarker: true });   // adds "$$" end-of-word marker per word-final node
 ```
 
 ## Error Handling

@@ -4,6 +4,56 @@ import { levenshteinDistance } from "./levenshtein.ts";
 const defaultDistanceFn: DistanceFn = (a, b) => levenshteinDistance(a, b);
 
 /**
+ * Default end-of-word sentinel key used by {@link TrieIndex.toCharTrie} when
+ * `terminalMarker: true`.
+ *
+ * It is two `$` code points. This is safe as a sentinel because real trie edge
+ * keys are *always* exactly one code point, so any key of length >= 2 can never
+ * collide with a real edge.
+ */
+export const DEFAULT_TERMINAL_MARKER = "$$";
+
+/** Options for {@link TrieIndex.toCharTrie}. */
+export interface CharTrieOptions {
+	/**
+	 * Emit an end-of-word terminal marker at word-final nodes so consumers can
+	 * distinguish a complete word from a mere prefix (e.g. the word `"bar"` from
+	 * the prefix shared with `"barn"`).
+	 *
+	 * - `false` (default): char-only projection, byte-identical to the legacy
+	 *   {@link TrieIndex.__toCharTrie} output.
+	 * - `true`: use the default {@link DEFAULT_TERMINAL_MARKER} (`"$$"`).
+	 * - `string`: use a custom sentinel key. Must be at least 2 code points long
+	 *   (real edges are single code points, so a >= 2-char key can never collide
+	 *   with one). A shorter sentinel throws.
+	 */
+	terminalMarker?: boolean | string;
+}
+
+/**
+ * Resolves the {@link CharTrieOptions.terminalMarker} option to a concrete
+ * sentinel string, or `null` when no marker should be emitted.
+ *
+ * @throws {Error} If a custom sentinel shorter than 2 code points is given.
+ */
+function resolveTerminalMarker(
+	marker: CharTrieOptions["terminalMarker"]
+): string | null {
+	if (!marker) return null;
+	const sentinel = marker === true ? DEFAULT_TERMINAL_MARKER : marker;
+	// Count code points (not UTF-16 units): a single emoji is one code point and
+	// could legitimately be a real edge, so it must be rejected as a sentinel.
+	if ([...sentinel].length < 2) {
+		throw new Error(
+			`Invalid terminalMarker ${JSON.stringify(sentinel)}: must be at ` +
+				`least 2 code points long, since real trie edges are single code ` +
+				`points and a shorter key could collide with one.`
+		);
+	}
+	return sentinel;
+}
+
+/**
  * TrieNode class represents a node in the Trie data structure.
  */
 class TrieNode {
@@ -24,16 +74,21 @@ class TrieNode {
 		};
 	}
 
-	__toCharTrie(
-		_tree: Record<string, any> = {},
-		_node?: TrieNode
+	/**
+	 * Projects this node's subtree into `tree` as a nested plain object keyed by
+	 * single code points. When `marker` is non-null, the sentinel key is written
+	 * at word-final nodes so consumers can tell a complete word from a prefix.
+	 */
+	toCharTrie(
+		tree: Record<string, any>,
+		marker: string | null
 	): Record<string, any> {
-		_node ??= this;
-		_node?.children?.entries().forEach(([char, node]) => {
-			_tree[char] ??= {};
-			this.__toCharTrie(_tree[char], node);
-		});
-		return _tree;
+		if (marker && this.isEOW) tree[marker] = true;
+		for (const [char, node] of this.children) {
+			tree[char] ??= {};
+			node.toCharTrie(tree[char], marker);
+		}
+		return tree;
 	}
 }
 
@@ -444,10 +499,48 @@ export class TrieIndex extends Index {
 		}
 	}
 
-	/** Debug helper */
+	/**
+	 * Projects the trie into a plain nested object suitable for serialization
+	 * (e.g. a Postgres JSONB column), where each key is a single code point and
+	 * its value is the child sub-object. Leaves are empty objects.
+	 *
+	 * By default the projection is char-only and therefore cannot distinguish a
+	 * complete word from a mere prefix (e.g. whether `"bar"` is itself an indexed
+	 * word, or only the shared prefix of `"barn"`). Pass `terminalMarker` to emit
+	 * an end-of-word sentinel key at word-final nodes:
+	 *
+	 * @example
+	 * ```ts
+	 * const idx = new TrieIndex();
+	 * idx.addWord("bar", "1");
+	 * idx.addWord("barn", "2");
+	 *
+	 * idx.toCharTrie();
+	 * // { b: { a: { r: { n: {} } } } }
+	 * //   ^ is "bar" an indexed word, or just a prefix of "barn"? Ambiguous.
+	 *
+	 * idx.toCharTrie({ terminalMarker: true });
+	 * // { b: { a: { r: { "$$": true, n: { "$$": true } } } } }
+	 * //                  ^ "bar" is a word    ^ "barn" is a word
+	 * ```
+	 *
+	 * The sentinel is collision-proof: real trie edges are always exactly one
+	 * code point, so a sentinel of length >= 2 can never be mistaken for an edge.
+	 *
+	 * @param options.terminalMarker - `false` (default) for char-only output;
+	 *   `true` for the default `"$$"` sentinel; or a custom sentinel string of at
+	 *   least 2 code points. A shorter custom sentinel throws.
+	 */
+	toCharTrie(options: CharTrieOptions = {}): Record<string, any> {
+		const marker = resolveTerminalMarker(options.terminalMarker);
+		return this.#root.toCharTrie({}, marker);
+	}
+
+	/**
+	 * @deprecated Use {@link TrieIndex.toCharTrie} instead. Retained as a
+	 * byte-compatible alias for the char-only projection (no terminal marker).
+	 */
 	__toCharTrie(): Record<string, any> {
-		const tree = {};
-		this.#root.__toCharTrie(tree);
-		return tree;
+		return this.toCharTrie();
 	}
 }

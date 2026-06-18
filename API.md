@@ -20,6 +20,7 @@ Complete API documentation for `@marianmeres/searchable`.
 - [Index Implementations](#index-implementations)
   - [InvertedIndex](#invertedindex)
   - [TrieIndex](#trieindex)
+    - [toCharTrie](#tochartrie)
   - [Shared methods](#index-methods-both-implementations)
 - [Utility Functions](#utility-functions)
   - [tokenize](#tokenize)
@@ -341,6 +342,62 @@ Trie (prefix tree) based index.
   subtrees whose row minimum exceeds `maxDistance` — dramatically faster
   than a linear scan on non-trivial vocabularies (v2.5.0+).
 - Slightly higher memory footprint.
+
+#### toCharTrie
+
+*TrieIndex only* (not available on `InvertedIndex`).
+
+```typescript
+toCharTrie(options?: CharTrieOptions): Record<string, any>
+
+interface CharTrieOptions {
+  terminalMarker?: boolean | string;   // default false
+}
+
+const DEFAULT_TERMINAL_MARKER = "$$";  // exported
+```
+
+Projects the trie into a plain nested object where each key is a single code
+point and its value is the child sub-object (leaves are `{}`). Useful for
+serializing the trie into a store that can query nested JSON — e.g. a Postgres
+JSONB column for SQL-side prefix matching via path existence.
+
+By default the projection is char-only and **cannot tell a complete word from a
+mere prefix**. Pass `terminalMarker` to emit an end-of-word sentinel key at
+word-final nodes:
+
+- `false` (default) — char-only output.
+- `true` — use the default `"$$"` sentinel (`DEFAULT_TERMINAL_MARKER`).
+- a custom `string` — must be **≥ 2 code points** (real trie edges are single
+  code points, so a longer key can never collide with one); a shorter sentinel
+  throws.
+
+```typescript
+import { Searchable, TrieIndex } from '@marianmeres/searchable';
+
+const idx = new TrieIndex();
+idx.addWord('bar', '1');
+idx.addWord('barn', '2');
+
+idx.toCharTrie();
+// { b: { a: { r: { n: {} } } } }
+//   is "bar" itself a word, or only a prefix of "barn"? Ambiguous.
+
+idx.toCharTrie({ terminalMarker: true });
+// { b: { a: { r: { "$$": true, n: { "$$": true } } } } }
+//                  └ "bar" is a word     └ "barn" is a word
+```
+
+From a `Searchable`, reach it through the underlying index:
+
+```typescript
+const index = new Searchable({ index: 'trie' });
+index.add('bar barn', 'doc1');
+(index.__index as TrieIndex).toCharTrie({ terminalMarker: true });
+```
+
+> The legacy `__toCharTrie()` debug helper is retained as a **deprecated**,
+> byte-compatible alias for `toCharTrie()` (char-only, no marker).
 
 ### Index methods (both implementations)
 
