@@ -1,3 +1,4 @@
 .DS_Store
 .npm-dist
 example/src/version.generated.ts
+tmp/*
