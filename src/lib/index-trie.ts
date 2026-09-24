@@ -55,41 +55,72 @@ function resolveTerminalMarker(
 
 /**
  * TrieNode class represents a node in the Trie data structure.
+ *
+ * Both collections are allocated lazily: most nodes are not word ends (no
+ * docIds), leaves have no children, and even an empty `Map`/`Set` costs ~100
+ * bytes. Allocating on demand cuts heap per indexed character by roughly 40%.
  */
 class TrieNode {
-	constructor(
-		/** Map of character to TrieNode */
-		public children: Map<string, TrieNode> = new Map<string, TrieNode>(),
-		/** Flag if this char represents end of word */
-		public isEOW: boolean = false,
-		/** Set of docIds associated with this word */
-		public docIds: Set<string> = new Set<string>()
-	) {}
+	/** Map of character to TrieNode. `null` for a leaf, never an empty Map. */
+	children: Map<string, TrieNode> | null = null;
+	/** Flag if this char represents end of word */
+	isEOW: boolean = false;
+	/** DocIds associated with this word. Non-null exactly when `isEOW`. */
+	docIds: Set<string> | null = null;
 
 	toJSON(): Record<string, any> {
 		return {
-			children: Object.fromEntries(this.children.entries()),
+			children: this.children ? Object.fromEntries(this.children) : {},
 			isEOW: this.isEOW,
-			docIds: [...this.docIds],
+			docIds: this.docIds ? [...this.docIds] : [],
 		};
 	}
 
 	/**
-	 * Projects this node's subtree into `tree` as a nested plain object keyed by
-	 * single code points. When `marker` is non-null, the sentinel key is written
-	 * at word-final nodes so consumers can tell a complete word from a prefix.
+	 * Projects this node's subtree into a nested plain object keyed by single
+	 * code points. When `marker` is non-null, the sentinel key is written at
+	 * word-final nodes so consumers can tell a complete word from a prefix.
+	 *
+	 * Iterative (explicit stack), so the nesting depth is bounded by memory, not
+	 * by the call stack. Each object still gets its keys in the same order as a
+	 * recursive walk would add them (marker first, then children in insertion
+	 * order), so the result serializes byte-identically.
 	 */
-	toCharTrie(
-		tree: Record<string, any>,
-		marker: string | null
-	): Record<string, any> {
-		if (marker && this.isEOW) tree[marker] = true;
-		for (const [char, node] of this.children) {
-			tree[char] ??= {};
-			node.toCharTrie(tree[char], marker);
+	toCharTrie(marker: string | null): Record<string, any> {
+		const out: Record<string, any> = {};
+		// Parallel stacks: `trees[i]` is the object that `nodes[i]` projects into.
+		const nodes: TrieNode[] = [this];
+		const trees: Record<string, any>[] = [out];
+		while (nodes.length) {
+			const node = nodes.pop()!;
+			const tree = trees.pop()!;
+			if (marker && node.isEOW) tree[marker] = true;
+			if (!node.children) continue;
+			for (const [char, child] of node.children) {
+				nodes.push(child);
+				trees.push((tree[char] ??= {}));
+			}
 		}
-		return tree;
+		return out;
 	}
+}
+
+/**
+ * Records `distance` for each of `docIds`, keeping the minimum per docId.
+ * Insertion order of `idToDistance` is first-discovery order, which callers
+ * rely on as the tie-break when sorting by distance.
+ */
+function recordMinDistance(
+	idToDistance: Map<string, number>,
+	docIds: Set<string>,
+	distance: number
+) {
+	docIds.forEach((id) => {
+		const prev = idToDistance.get(id);
+		if (prev === undefined || distance < prev) {
+			idToDistance.set(id, distance);
+		}
+	});
 }
 
 /**
@@ -129,6 +160,12 @@ export class TrieIndex extends Index {
 		this.#root = new TrieNode();
 	}
 
+	/**
+	 * Debug view of the raw node structure. It nests two levels per character,
+	 * so for a very long word `JSON.stringify(index)` is bounded by the engine's
+	 * recursive serializer (V8 leaves its iterative fast path once a `toJSON` is
+	 * involved). Use the flat {@link TrieIndex.dump} for persistence.
+	 */
 	toJSON(): Record<string, any> {
 		return this.#root.toJSON().children;
 	}
@@ -176,18 +213,22 @@ export class TrieIndex extends Index {
 
 		let currentNode = this.#root;
 		for (const char of word) {
-			if (!currentNode.children.has(char)) {
-				currentNode.children.set(char, new TrieNode());
+			const children = (currentNode.children ??= new Map());
+			let child = children.get(char);
+			if (!child) {
+				child = new TrieNode();
+				children.set(char, child);
 			}
-			currentNode = currentNode.children.get(char)!;
+			currentNode = child;
 		}
 
 		// new unique word if this node was not EOW yet
 		if (!currentNode.isEOW) this.#wordCount++;
 		currentNode.isEOW = true;
 
-		const isNewEntry = !currentNode.docIds.has(docId);
-		currentNode.docIds.add(docId);
+		const docIds = (currentNode.docIds ??= new Set());
+		const isNewEntry = !docIds.has(docId);
+		docIds.add(docId);
 
 		if (!this.#docIdToWords.has(docId)) {
 			this.#docIdToWords.set(docId, new Set());
@@ -201,7 +242,7 @@ export class TrieIndex extends Index {
 	removeWord(word: string, docId: string): boolean {
 		this.#assertWordAndDocId(word, docId);
 
-		const result = this.#removeWordFromTrie(this.#root, [...word], 0, docId);
+		const result = this.#removeWordFromTrie(word, docId);
 
 		if (result && this.#docIdToWords.has(docId)) {
 			this.#docIdToWords.get(docId)!.delete(word);
@@ -221,7 +262,7 @@ export class TrieIndex extends Index {
 		let removedCount = 0;
 
 		for (const word of words) {
-			if (this.#removeWordFromTrie(this.#root, [...word], 0, docId)) {
+			if (this.#removeWordFromTrie(word, docId)) {
 				removedCount++;
 			}
 		}
@@ -232,13 +273,18 @@ export class TrieIndex extends Index {
 
 	/** Search for documents containing the exact word. */
 	searchExact(word: string): string[] {
-		let currentNode = this.#root;
-		for (const char of word) {
-			if (!currentNode.children.has(char)) return [];
-			currentNode = currentNode.children.get(char)!;
+		const node = this.#findNode(word);
+		return node?.isEOW ? [...node.docIds!] : [];
+	}
+
+	/** Walks the edges spelled by `path` from the root; `undefined` if absent. */
+	#findNode(path: string): TrieNode | undefined {
+		let currentNode: TrieNode | undefined = this.#root;
+		for (const char of path) {
+			currentNode = currentNode.children?.get(char);
+			if (!currentNode) return undefined;
 		}
-		if (!currentNode.isEOW) return [];
-		return [...currentNode.docIds];
+		return currentNode;
 	}
 
 	/** Search for documents containing words with the given prefix. */
@@ -251,14 +297,11 @@ export class TrieIndex extends Index {
 		prefix: string,
 		returnWithDistance: boolean = false
 	): string[] | Record<string, number> {
-		let currentNode = this.#root;
-		for (const char of prefix) {
-			if (!currentNode.children.has(char)) return [];
-			currentNode = currentNode.children.get(char)!;
-		}
+		const node = this.#findNode(prefix);
+		if (!node) return [];
 
 		const idToDistance = new Map<string, number>();
-		this.#collectPrefixMatches(currentNode, 0, idToDistance);
+		this.#collectPrefixMatches(node, idToDistance);
 
 		if (returnWithDistance) {
 			return Object.fromEntries(idToDistance.entries());
@@ -308,12 +351,7 @@ export class TrieIndex extends Index {
 			for (const [indexedWord, docIds] of all.entries()) {
 				const distance = options.distanceFn(word, indexedWord);
 				if (distance > maxDistance) continue;
-				docIds.forEach((id) => {
-					const prev = idToDistance.get(id);
-					if (prev === undefined || distance < prev) {
-						idToDistance.set(id, distance);
-					}
-				});
+				recordMinDistance(idToDistance, docIds, distance);
 			}
 		} else {
 			// Trie-walked Levenshtein with row-min pruning.
@@ -327,6 +365,14 @@ export class TrieIndex extends Index {
 			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
 		);
 	}
+
+	// All trie walks below are iterative. Recursion depth would equal the length
+	// of the longest indexed word, so a single long token (a base64 blob, a URL
+	// without separators) would overflow the call stack. The pre-order walks keep
+	// a stack of `Map` iterators, one per level, which visits nodes in exactly the
+	// order a recursive walk does (a node, then its children in insertion order).
+	// That order is observable: it is `getAllWords()`/`dump()` order and the
+	// tie-break between equal distances in search results.
 
 	/**
 	 * DFS over the trie maintaining the current Levenshtein row for the query.
@@ -344,103 +390,140 @@ export class TrieIndex extends Index {
 		const initialRow = new Array<number>(qLen + 1);
 		for (let j = 0; j <= qLen; j++) initialRow[j] = j;
 
-		const visit = (node: TrieNode, prevRow: number[]) => {
-			for (const [char, child] of node.children) {
-				const newRow = new Array<number>(qLen + 1);
-				newRow[0] = prevRow[0] + 1;
-				let rowMin = newRow[0];
-
-				for (let j = 1; j <= qLen; j++) {
-					const cost = qChars[j - 1] === char ? 0 : 1;
-					newRow[j] = Math.min(
-						prevRow[j] + 1,
-						newRow[j - 1] + 1,
-						prevRow[j - 1] + cost
-					);
-					if (newRow[j] < rowMin) rowMin = newRow[j];
-				}
-
-				if (child.isEOW && newRow[qLen] <= maxDistance) {
-					const distance = newRow[qLen];
-					child.docIds.forEach((id) => {
-						const prev = idToDistance.get(id);
-						if (prev === undefined || distance < prev) {
-							idToDistance.set(id, distance);
-						}
-					});
-				}
-
-				// Prune: if every cell in this row already exceeds maxDistance,
-				// no descendant can have final distance <= maxDistance.
-				if (rowMin <= maxDistance) visit(child, newRow);
-			}
-		};
-
 		// Root itself is never EOW in our model; just descend.
-		visit(this.#root, initialRow);
+		if (!this.#root.children) return;
+
+		// Parallel stacks: `rows[i]` is the row of the node whose children
+		// `iters[i]` is iterating.
+		const iters = [this.#root.children.entries()];
+		const rows = [initialRow];
+
+		while (iters.length) {
+			const next = iters[iters.length - 1].next();
+			if (next.done) {
+				iters.pop();
+				rows.pop();
+				continue;
+			}
+			const [char, child] = next.value;
+			const prevRow = rows[rows.length - 1];
+
+			const newRow = new Array<number>(qLen + 1);
+			newRow[0] = prevRow[0] + 1;
+			let rowMin = newRow[0];
+
+			for (let j = 1; j <= qLen; j++) {
+				const cost = qChars[j - 1] === char ? 0 : 1;
+				newRow[j] = Math.min(
+					prevRow[j] + 1,
+					newRow[j - 1] + 1,
+					prevRow[j - 1] + cost
+				);
+				if (newRow[j] < rowMin) rowMin = newRow[j];
+			}
+
+			if (child.isEOW && newRow[qLen] <= maxDistance) {
+				recordMinDistance(idToDistance, child.docIds!, newRow[qLen]);
+			}
+
+			// Prune: if every cell in this row already exceeds maxDistance,
+			// no descendant can have final distance <= maxDistance.
+			if (rowMin <= maxDistance && child.children) {
+				iters.push(child.children.entries());
+				rows.push(newRow);
+			}
+		}
 	}
 
-	/** Recursive remove helper. Operates on pre-split code-point strings so
-	 * astral characters (emoji / surrogate pairs) index consistently with add. */
-	#removeWordFromTrie(
-		node: TrieNode,
-		chars: string[],
-		index: number,
-		docId: string
-	): boolean {
-		if (index === chars.length) {
-			if (!node.isEOW) return false;
-			const result = node.docIds.delete(docId);
-			if (node.docIds.size === 0) {
-				node.isEOW = false;
-				this.#wordCount--;
+	/**
+	 * Removes `docId` from `word`'s end-of-word node, then prunes nodes left
+	 * with no children and no EOW flag, bottom-up along the walked path.
+	 * Iterates code points, so astral characters (emoji / surrogate pairs)
+	 * index consistently with add.
+	 */
+	#removeWordFromTrie(word: string, docId: string): boolean {
+		// `nodes[i]` is the node at depth i; `chars[i]` is the edge into nodes[i + 1].
+		const nodes: TrieNode[] = [this.#root];
+		const chars: string[] = [];
+		let reachedEnd = true;
+		for (const char of word) {
+			const child = nodes[nodes.length - 1].children?.get(char);
+			if (!child) {
+				reachedEnd = false;
+				break;
 			}
-			return result;
+			chars.push(char);
+			nodes.push(child);
 		}
 
-		const char = chars[index];
-		if (!node.children.has(char)) return false;
+		let result = false;
+		const node = nodes[nodes.length - 1];
+		if (reachedEnd && node.isEOW) {
+			result = node.docIds!.delete(docId);
+			if (node.docIds!.size === 0) {
+				node.isEOW = false;
+				node.docIds = null;
+				this.#wordCount--;
+			}
+		}
 
-		const childNode: TrieNode = node.children.get(char)!;
-		const result = this.#removeWordFromTrie(childNode, chars, index + 1, docId);
-
-		if (childNode.children.size === 0 && !childNode.isEOW) {
-			node.children.delete(char);
+		// Once a node is kept, every ancestor still has at least that child.
+		for (let i = nodes.length - 1; i > 0; i--) {
+			if (nodes[i].children || nodes[i].isEOW) break;
+			const parent = nodes[i - 1];
+			parent.children!.delete(chars[i - 1]);
+			if (!parent.children!.size) parent.children = null;
 		}
 
 		return result;
 	}
 
-	/** Collects docIds from every EOW node in the subtree rooted at `node`,
+	/** Collects docIds from every EOW node in the subtree rooted at `start`,
 	 * tracking the distance from the prefix boundary. */
-	#collectPrefixMatches(
-		node: TrieNode,
-		depthFromPrefix: number,
-		idToDistance: Map<string, number>
-	) {
-		if (node.isEOW) {
-			node.docIds.forEach((id) => {
-				const prev = idToDistance.get(id);
-				if (prev === undefined || depthFromPrefix < prev) {
-					idToDistance.set(id, depthFromPrefix);
-				}
-			});
-		}
-		for (const child of node.children.values()) {
-			this.#collectPrefixMatches(child, depthFromPrefix + 1, idToDistance);
+	#collectPrefixMatches(start: TrieNode, idToDistance: Map<string, number>) {
+		if (start.isEOW) recordMinDistance(idToDistance, start.docIds!, 0);
+		if (!start.children) return;
+
+		const stack = [start.children.values()];
+		while (stack.length) {
+			const next = stack[stack.length - 1].next();
+			if (next.done) {
+				stack.pop();
+				continue;
+			}
+			const child = next.value;
+			// the stack holds one iterator per level, so its size is the depth
+			if (child.isEOW) {
+				recordMinDistance(idToDistance, child.docIds!, stack.length);
+			}
+			if (child.children) stack.push(child.children.values());
 		}
 	}
 
 	/** Helper: collect every word+docIds pair in the trie (used for dump + custom-fn fuzzy). */
 	#collectAllWords(): Map<string, Set<string>> {
 		const results = new Map<string, Set<string>>();
-		const visit = (node: TrieNode, word: string) => {
-			if (node.isEOW) results.set(word, new Set(node.docIds));
-			for (const [char, child] of node.children) {
-				visit(child, word + char);
+		if (!this.#root.children) return results;
+
+		// Parallel stacks: `words[i]` is the word spelled by the node whose
+		// children `iters[i]` is iterating. Leaves push nothing.
+		const iters = [this.#root.children.entries()];
+		const words = [""];
+		while (iters.length) {
+			const next = iters[iters.length - 1].next();
+			if (next.done) {
+				iters.pop();
+				words.pop();
+				continue;
 			}
-		};
-		visit(this.#root, "");
+			const [char, child] = next.value;
+			const word = words[words.length - 1] + char;
+			if (child.isEOW) results.set(word, new Set(child.docIds));
+			if (child.children) {
+				iters.push(child.children.entries());
+				words.push(word);
+			}
+		}
 		return results;
 	}
 
@@ -533,7 +616,7 @@ export class TrieIndex extends Index {
 	 */
 	toCharTrie(options: CharTrieOptions = {}): Record<string, any> {
 		const marker = resolveTerminalMarker(options.terminalMarker);
-		return this.#root.toCharTrie({}, marker);
+		return this.#root.toCharTrie(marker);
 	}
 
 	/**

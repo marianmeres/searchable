@@ -203,8 +203,16 @@ Where: n = total words, k = query length, m = average word length.
 | Exact search | O(1) | O(k) |
 | Prefix search | O(n) | O(k + matches) |
 | Fuzzy search | O(n·m) linear | pruned trie walk, typically faster for vocabularies with many shared prefixes |
-| Memory | lower | higher (one node per char per path) |
+| Memory | lower | higher (one node per char per path, ~160 B per unique indexed char) |
+| Word length | unbounded | unbounded: every walk is iterative, so a 100k-char token is fine |
 | Recommended for | small indexes / simple use | autocomplete / fuzzy heavy / large vocabularies |
+
+`TrieIndex` walk order is a contract: pre-order (a node, then its children in
+insertion order). It fixes `getAllWords()` / `dump()` order and the tie-break
+between equal distances in search results; `tests/trie-walks.test.ts` pins it
+against a recursive reference model. The one depth-bounded path left is
+`JSON.stringify(trieIndex)` (debug `toJSON`, nests per char, engine-recursive);
+persist with the flat `dump()` instead.
 
 ## Data Flow (index path)
 
