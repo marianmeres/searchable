@@ -1,6 +1,6 @@
 {
 	"name": "@marianmeres/searchable",
-	"version": "2.9.0",
+	"version": "2.10.0",
 	"exports": "./src/mod.ts",
 	"tasks": {
 		"test": "deno test",
@@ -30,6 +30,8 @@
 		"indentWidth": 4
 	},
 	"minimumDependencyAge": {
-		"exclude": ["jsr:@marianmeres/*"]
+		"exclude": [
+			"jsr:@marianmeres/*"
+		]
 	}
 }
