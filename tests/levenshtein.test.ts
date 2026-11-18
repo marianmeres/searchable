@@ -1,9 +1,10 @@
-import { assertEquals } from "@std/assert/equals";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { levenshteinDistance } from "../src/lib/levenshtein.ts";
 
 type TestInput = [string, string, number][];
 
-Deno.test("levenshtein distance works", () => {
+test("levenshtein distance works", () => {
 	(
 		[
 			["kitten", "sitting", 3],
@@ -16,30 +17,30 @@ Deno.test("levenshtein distance works", () => {
 		] as TestInput
 	).forEach(([source, target, expected]) => {
 		const actual = levenshteinDistance(source, target);
-		assertEquals(actual, expected, [source, target, actual, expected].join());
+		assert.deepStrictEqual(actual, expected, [source, target, actual, expected].join());
 	});
 });
 
-Deno.test("levenshtein handles astral characters as single code points", () => {
+test("levenshtein handles astral characters as single code points", () => {
 	// 😀 is 2 UTF-16 code units but one code point
-	assertEquals(levenshteinDistance("😀cat", "😀cats"), 1);
-	assertEquals(levenshteinDistance("cat😀", "cats😀"), 1);
-	assertEquals(levenshteinDistance("😀", "😀"), 0);
-	assertEquals(levenshteinDistance("😀", "😎"), 1);
+	assert.deepStrictEqual(levenshteinDistance("😀cat", "😀cats"), 1);
+	assert.deepStrictEqual(levenshteinDistance("cat😀", "cats😀"), 1);
+	assert.deepStrictEqual(levenshteinDistance("😀", "😀"), 0);
+	assert.deepStrictEqual(levenshteinDistance("😀", "😎"), 1);
 	// Math alphanumerics (astral)
-	assertEquals(levenshteinDistance("𝕏", "𝕐"), 1);
+	assert.deepStrictEqual(levenshteinDistance("𝕏", "𝕐"), 1);
 });
 
-Deno.test("levenshtein damerau option recognises transpositions", () => {
-	assertEquals(levenshteinDistance("teh", "the"), 2);
-	assertEquals(levenshteinDistance("teh", "the", { damerau: true }), 1);
-	assertEquals(levenshteinDistance("recieve", "receive", { damerau: true }), 1);
+test("levenshtein damerau option recognises transpositions", () => {
+	assert.deepStrictEqual(levenshteinDistance("teh", "the"), 2);
+	assert.deepStrictEqual(levenshteinDistance("teh", "the", { damerau: true }), 1);
+	assert.deepStrictEqual(levenshteinDistance("recieve", "receive", { damerau: true }), 1);
 	// pure substitutions should still work
-	assertEquals(levenshteinDistance("cat", "hat", { damerau: true }), 1);
+	assert.deepStrictEqual(levenshteinDistance("cat", "hat", { damerau: true }), 1);
 });
 
-Deno.test("levenshtein edge cases", () => {
-	assertEquals(levenshteinDistance("", ""), 0);
-	assertEquals(levenshteinDistance("abc", ""), 3);
-	assertEquals(levenshteinDistance("", "abc"), 3);
+test("levenshtein edge cases", () => {
+	assert.deepStrictEqual(levenshteinDistance("", ""), 0);
+	assert.deepStrictEqual(levenshteinDistance("abc", ""), 3);
+	assert.deepStrictEqual(levenshteinDistance("", "abc"), 3);
 });

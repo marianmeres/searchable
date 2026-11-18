@@ -1,13 +1,14 @@
-import { assertEquals } from "@std/assert/equals";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { normalize } from "../src/lib/normalize.ts";
 
-Deno.test("normalize works", () => {
-	assertEquals(normalize("Kôň"), "kon");
-	assertEquals(normalize("Kôň", { caseSensitive: true }), "Kon");
-	assertEquals(normalize("Kôň", { accentSensitive: true }), "kôň");
+test("normalize works", () => {
+	assert.deepStrictEqual(normalize("Kôň"), "kon");
+	assert.deepStrictEqual(normalize("Kôň", { caseSensitive: true }), "Kon");
+	assert.deepStrictEqual(normalize("Kôň", { accentSensitive: true }), "kôň");
 
 	// effectively no-op
-	assertEquals(
+	assert.deepStrictEqual(
 		normalize("Kôň", { caseSensitive: true, accentSensitive: true }),
 		"Kôň"
 	);

@@ -1,81 +1,82 @@
-import { assertEquals } from "@std/assert";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { InvertedIndex } from "../src/lib/index-inverted.ts";
 
-Deno.test("inverted index works", () => {
+test("inverted index works", () => {
 	const idx = new InvertedIndex();
 	idx.addWord("foo", "1");
 	idx.addWord("foo", "2");
 	idx.addWord("bar", "3");
 
-	assertEquals(idx.wordCount, 2);
-	assertEquals(idx.docIdCount, 3);
+	assert.deepStrictEqual(idx.wordCount, 2);
+	assert.deepStrictEqual(idx.docIdCount, 3);
 
-	assertEquals(idx.getAllWords(), ["foo", "bar"]);
-	assertEquals(idx.getAllDocIds(), ["1", "2", "3"]);
+	assert.deepStrictEqual(idx.getAllWords(), ["foo", "bar"]);
+	assert.deepStrictEqual(idx.getAllDocIds(), ["1", "2", "3"]);
 
 	const dump1 = idx.dump();
 	let dump = dump1;
 
-	assertEquals(dump.words, { foo: ["1", "2"], bar: ["3"] });
-	// assertEquals(dump.docIdToWords, { 1: ["foo"], 2: ["foo"], 3: ["bar"] });
+	assert.deepStrictEqual(dump.words, { foo: ["1", "2"], bar: ["3"] });
+	// assert.deepStrictEqual(dump.docIdToWords, { 1: ["foo"], 2: ["foo"], 3: ["bar"] });
 
 	idx.removeWord("foo", "2");
 
 	dump = idx.dump();
-	assertEquals(dump.words, { foo: ["1"], bar: ["3"] });
-	// assertEquals(dump.docIdToWords, { 1: ["foo"], 3: ["bar"] });
+	assert.deepStrictEqual(dump.words, { foo: ["1"], bar: ["3"] });
+	// assert.deepStrictEqual(dump.docIdToWords, { 1: ["foo"], 3: ["bar"] });
 
 	// restore the initial
 	idx.restore(dump1);
 	dump = idx.dump();
-	assertEquals(dump.words, { foo: ["1", "2"], bar: ["3"] });
-	// assertEquals(dump.docIdToWords, { 1: ["foo"], 2: ["foo"], 3: ["bar"] });
+	assert.deepStrictEqual(dump.words, { foo: ["1", "2"], bar: ["3"] });
+	// assert.deepStrictEqual(dump.docIdToWords, { 1: ["foo"], 2: ["foo"], 3: ["bar"] });
 
 	//
 	let res: any = idx.searchExact("foo");
-	assertEquals(res, ["1", "2"]);
+	assert.deepStrictEqual(res, ["1", "2"]);
 
 	res = idx.searchExact("bar");
-	assertEquals(res, ["3"]);
+	assert.deepStrictEqual(res, ["3"]);
 
 	res = idx.searchExact("hey");
-	assertEquals(res, []);
+	assert.deepStrictEqual(res, []);
 
 	//
 	res = idx.searchByPrefix("f");
-	assertEquals(res, ["1", "2"]);
+	assert.deepStrictEqual(res, ["1", "2"]);
 
 	res = idx.searchByPrefix("fo");
-	assertEquals(res, ["1", "2"]);
+	assert.deepStrictEqual(res, ["1", "2"]);
 
 	res = idx.searchByPrefix("fo", true);
-	assertEquals(res, { 1: 1, 2: 1 });
+	assert.deepStrictEqual(res, { 1: 1, 2: 1 });
 	// console.log(res);
 
 	res = idx.searchByPrefix("fooo");
-	assertEquals(res, []);
+	assert.deepStrictEqual(res, []);
 
 	res = idx.searchByPrefix("b");
-	assertEquals(res, ["3"]);
+	assert.deepStrictEqual(res, ["3"]);
 
 	//
 	res = idx.searchByDocId("3");
-	assertEquals(res, ["bar"]);
+	assert.deepStrictEqual(res, ["bar"]);
 
 	res = idx.searchByDocId("1");
-	assertEquals(res, ["foo"]);
+	assert.deepStrictEqual(res, ["foo"]);
 
 	res = idx.searchByDocId("123");
-	assertEquals(res, []);
+	assert.deepStrictEqual(res, []);
 
 	//
 	idx.removeDocId("2");
 	dump = idx.dump();
-	assertEquals(dump.words, { foo: ["1"], bar: ["3"] });
-	// assertEquals(dump.docIdToWords, { 1: ["foo"], 3: ["bar"] });
+	assert.deepStrictEqual(dump.words, { foo: ["1"], bar: ["3"] });
+	// assert.deepStrictEqual(dump.docIdToWords, { 1: ["foo"], 3: ["bar"] });
 });
 
-Deno.test("inverted fuzzy search", () => {
+test("inverted fuzzy search", () => {
 	const docs = ["hello", "ehlo", "books", "look", "cook", "hello", "hell"];
 
 	const idx = new InvertedIndex();
@@ -85,17 +86,17 @@ Deno.test("inverted fuzzy search", () => {
 	// console.log(idx.dump());
 
 	let res = idx.searchFuzzy("hel", 3);
-	assertEquals(res, ["6" /*hell*/, "0" /*hello*/, "5" /*hello*/, "1" /*ehlo*/]);
+	assert.deepStrictEqual(res, ["6" /*hell*/, "0" /*hello*/, "5" /*hello*/, "1" /*ehlo*/]);
 
 	const res2 = idx.searchFuzzy("hel", 3, true);
-	assertEquals(res2, { 0: 2, 1: 3, 5: 2, 6: 1 });
+	assert.deepStrictEqual(res2, { 0: 2, 1: 3, 5: 2, 6: 1 });
 
 	res = idx.searchFuzzy("oo");
-	assertEquals(res, ["3", "4"]);
+	assert.deepStrictEqual(res, ["3", "4"]);
 
 	res = idx.searchFuzzy("hello");
-	assertEquals(res, ["0", "5", "6", "1"]);
+	assert.deepStrictEqual(res, ["0", "5", "6", "1"]);
 
 	res = idx.searchFuzzy("hello", 1);
-	assertEquals(res, ["0", "5", "6"]);
+	assert.deepStrictEqual(res, ["0", "5", "6"]);
 });

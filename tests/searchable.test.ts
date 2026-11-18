@@ -1,6 +1,6 @@
-import { assert, assertEquals } from "@std/assert";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { Searchable, type SearchableOptions } from "../src/searchable.ts";
-import { resolve } from "@std/path/resolve";
 
 const clog = console.log;
 
@@ -27,88 +27,88 @@ const createSearchable = (opts: Partial<SearchableOptions> = {}) => {
 	return idx;
 };
 
-Deno.test("searchExact works", () => {
+test("searchExact works", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index });
 
 		let res = idx.searchExact("office home");
 		// console.log(res);
-		assertEquals(res, ["7", "10"]);
+		assert.deepStrictEqual(res, ["7", "10"]);
 
 		res = idx.searchExact("2018");
-		assertEquals(res, []);
+		assert.deepStrictEqual(res, []);
 
 		// because "-" is whitelisted as part of the word
 		res = idx.searchExact("2018-2020");
-		assertEquals(res, ["6"]);
+		assert.deepStrictEqual(res, ["6"]);
 	});
 });
 
-Deno.test("searchByPrefix works", () => {
+test("searchByPrefix works", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index });
 
 		let res = idx.searchByPrefix("he");
-		assertEquals(res, ["1", "11", "8"]);
+		assert.deepStrictEqual(res, ["1", "11", "8"]);
 
 		res = idx.searchByPrefix("2018");
-		assertEquals(res, ["6"]);
+		assert.deepStrictEqual(res, ["6"]);
 
 		// because "-" is whitelisted as part of the word
 		res = idx.searchByPrefix("2018-2020");
 		// console.log(res);
-		assertEquals(res, ["6"]);
+		assert.deepStrictEqual(res, ["6"]);
 	});
 });
 
-Deno.test("searchFuzzy works", () => {
+test("searchFuzzy works", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index });
 
 		let res = idx.searchFuzzy("Ófíce hme");
-		assertEquals(res, ["7", "10"]);
+		assert.deepStrictEqual(res, ["7", "10"]);
 
 		res = idx.searchFuzzy("2018");
 		// note that we're NOT getting 6 because "2025" is closer to "2018"
 		// than to "2018-2020"
-		assertEquals(res, ["7"]);
+		assert.deepStrictEqual(res, ["7"]);
 
 		res = idx.searchFuzzy("kichtén");
 		// console.log(res);
-		assertEquals(res, ["1", "2"]);
+		assert.deepStrictEqual(res, ["1", "2"]);
 	});
 });
 
-Deno.test("searchByPrefix with n-grams works", () => {
+test("searchByPrefix with n-grams works", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index, ngramsSize: [3, 4, 5] });
 
 		let res = idx.searchByPrefix("nal");
-		assertEquals(res, ["4", "8"]);
+		assert.deepStrictEqual(res, ["4", "8"]);
 
 		res = idx.searchByPrefix("table");
-		assertEquals(res, ["10"]);
+		assert.deepStrictEqual(res, ["10"]);
 	});
 });
 
-Deno.test("searchFuzzy with n-grams works", () => {
+test("searchFuzzy with n-grams works", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index, ngramsSize: [3] });
 
 		// hm... this is way too tolerant
 		const res = idx.searchFuzzy("table");
 		// console.log(res);
-		assertEquals(res, ["2", "10"]);
+		assert.deepStrictEqual(res, ["2", "10"]);
 	});
 });
 
-Deno.test("readme", () => {
+test("readme", () => {
 	const index = new Searchable({ ngramsSize: [3, 4] });
 	index.add("james bond", "007");
 
 	const results = index.searchByPrefix("Bond. James Bond.");
-	assert(results.length === 1);
-	assert(results[0] === "007");
+	assert.ok(results.length === 1);
+	assert.ok(results[0] === "007");
 
 	// console.log(results);
 	// index.add(
@@ -120,24 +120,24 @@ Deno.test("readme", () => {
 	// console.log(results);
 });
 
-Deno.test("with slash", () => {
+test("with slash", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index });
 
-		assertEquals(idx.search("file.txt"), ["12"]);
-		assertEquals(idx.search("to/1234"), ["12"]);
+		assert.deepStrictEqual(idx.search("file.txt"), ["12"]);
+		assert.deepStrictEqual(idx.search("to/1234"), ["12"]);
 	});
 });
 
-Deno.test("empty nonWordCharWhitelist", () => {
+test("empty nonWordCharWhitelist", () => {
 	(["inverted", "trie"] as ("inverted" | "trie")[]).forEach((index) => {
 		const idx = createSearchable({ index, nonWordCharWhitelist: "" });
 
-		assertEquals(idx.search("path"), ["12"]);
+		assert.deepStrictEqual(idx.search("path"), ["12"]);
 	});
 });
 
-Deno.test("addBatch works with array", () => {
+test("addBatch works with array", () => {
 	const index = new Searchable({ index: "inverted" });
 
 	const result = index.addBatch([
@@ -146,17 +146,17 @@ Deno.test("addBatch works with array", () => {
 		["doc3", "indiana jones"],
 	]);
 
-	assertEquals(result.errors.length, 0);
-	assertEquals(result.added > 0, true);
+	assert.deepStrictEqual(result.errors.length, 0);
+	assert.deepStrictEqual(result.added > 0, true);
 
 	const search1 = index.search("bond");
-	assertEquals(search1, ["doc1"]);
+	assert.deepStrictEqual(search1, ["doc1"]);
 
 	const search2 = index.search("mission");
-	assertEquals(search2, ["doc2"]);
+	assert.deepStrictEqual(search2, ["doc2"]);
 });
 
-Deno.test("addBatch works with object", () => {
+test("addBatch works with object", () => {
 	const index = new Searchable({ index: "trie" });
 
 	const result = index.addBatch({
@@ -165,14 +165,14 @@ Deno.test("addBatch works with object", () => {
 		doc3: "indiana jones",
 	});
 
-	assertEquals(result.errors.length, 0);
-	assertEquals(result.added > 0, true);
+	assert.deepStrictEqual(result.errors.length, 0);
+	assert.deepStrictEqual(result.added > 0, true);
 
 	const search = index.search("jones");
-	assertEquals(search, ["doc3"]);
+	assert.deepStrictEqual(search, ["doc3"]);
 });
 
-Deno.test("addBatch handles errors in non-strict mode", () => {
+test("addBatch handles errors in non-strict mode", () => {
 	const index = new Searchable();
 
 	const result = index.addBatch([
@@ -183,19 +183,19 @@ Deno.test("addBatch handles errors in non-strict mode", () => {
 	], false); // non-strict mode
 
 	// Should have added the valid entries
-	assertEquals(result.added > 0, true);
+	assert.deepStrictEqual(result.added > 0, true);
 	// Should have collected errors
-	assertEquals(result.errors.length, 2);
-	assertEquals(result.errors[0].docId, "");
-	assertEquals(result.errors[1].docId, "doc2");
+	assert.deepStrictEqual(result.errors.length, 2);
+	assert.deepStrictEqual(result.errors[0].docId, "");
+	assert.deepStrictEqual(result.errors[1].docId, "doc2");
 
 	// Valid entries should be searchable
 	const search = index.search("valid");
-	assert(search.includes("doc1"));
-	assert(search.includes("doc3"));
+	assert.ok(search.includes("doc1"));
+	assert.ok(search.includes("doc3"));
 });
 
-Deno.test("merged works", () => {
+test("merged works", () => {
 	const beatles = {
 		j: {
 			email: "john-1@lennon.com",
@@ -252,16 +252,16 @@ Deno.test("merged works", () => {
 
 	let r = index.search("john");
 	// console.log(fuzzy.search("don't"));
-	assertEquals(r, ["j"]);
+	assert.deepStrictEqual(r, ["j"]);
 
 	r = index.search("@beatles.com");
-	assertEquals(r, ["p", "r"]);
+	assert.deepStrictEqual(r, ["p", "r"]);
 
 	r = index.search("p_a_u+");
-	assertEquals(r, ["p"]);
+	assert.deepStrictEqual(r, ["p"]);
 
 	//
-	assertEquals(prefix.lastQuery, {
+	assert.deepStrictEqual(prefix.lastQuery, {
 		history: ["@beatles.com", "p_a_u+"],
 		rawHistory: ["@beatles.com", "p_a_u+"],
 		raw: "p_a_u+",
@@ -270,14 +270,14 @@ Deno.test("merged works", () => {
 
 	//
 	fuzzy.search("");
-	assertEquals(fuzzy.lastQuery, {
+	assert.deepStrictEqual(fuzzy.lastQuery, {
 		history: ["john", "@beatles.com", "p_a_u+"], // longer history than prefix
 		rawHistory: ["john", "@beatles.com", "p_a_u+"],
 		raw: "", // last raw
 		used: "p_a_u+",
 	});
-	// assertEquals(prefix.lastRawQuery, "p_a_u+");
-	// assertEquals(fuzzy.lastRawQuery, "p_a_u+");
+	// assert.deepStrictEqual(prefix.lastRawQuery, "p_a_u+");
+	// assert.deepStrictEqual(fuzzy.lastRawQuery, "p_a_u+");
 
 	// console.log(JSON.stringify(prefix.dump(false), null, 4));
 	// console.log(JSON.stringify(fuzzy.dump(false), null, 4));

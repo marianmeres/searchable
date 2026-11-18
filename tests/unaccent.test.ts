@@ -1,13 +1,14 @@
-import { assertEquals } from "@std/assert";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { unaccent } from "../src/lib/unaccent.ts";
 
-Deno.test("unaccent works", () => {
-	assertEquals(
+test("unaccent works", () => {
+	assert.deepStrictEqual(
 		unaccent("Příliš žluťoučký kůň úpěl ďábelské ódy"),
 		"Prilis zlutoucky kun upel dabelske ody"
 	);
 
-	assertEquals(
+	assert.deepStrictEqual(
 		unaccent(
 			"Vypätá dcéra grófa Maxwella s IQ nižším ako kôň núti čeľaď hrýzť hŕbu jabĺk"
 		),
@@ -15,15 +16,15 @@ Deno.test("unaccent works", () => {
 	);
 });
 
-Deno.test("unaccent folds letters NFD doesn't decompose", () => {
-	assertEquals(unaccent("straße"), "strasse");
-	assertEquals(unaccent("STRAẞE"), "STRASSE");
-	assertEquals(unaccent("København"), "Kobenhavn");
-	assertEquals(unaccent("Ångström"), "Angstrom");
-	assertEquals(unaccent("Encyclopædia"), "Encyclopaedia");
-	assertEquals(unaccent("cœur"), "coeur");
-	assertEquals(unaccent("łódź"), "lodz");
-	assertEquals(unaccent("Đặng"), "Dang");
-	assertEquals(unaccent("þór"), "thor");
-	assertEquals(unaccent("mıx"), "mix"); // Turkish dotless i
+test("unaccent folds letters NFD doesn't decompose", () => {
+	assert.deepStrictEqual(unaccent("straße"), "strasse");
+	assert.deepStrictEqual(unaccent("STRAẞE"), "STRASSE");
+	assert.deepStrictEqual(unaccent("København"), "Kobenhavn");
+	assert.deepStrictEqual(unaccent("Ångström"), "Angstrom");
+	assert.deepStrictEqual(unaccent("Encyclopædia"), "Encyclopaedia");
+	assert.deepStrictEqual(unaccent("cœur"), "coeur");
+	assert.deepStrictEqual(unaccent("łódź"), "lodz");
+	assert.deepStrictEqual(unaccent("Đặng"), "Dang");
+	assert.deepStrictEqual(unaccent("þór"), "thor");
+	assert.deepStrictEqual(unaccent("mıx"), "mix"); // Turkish dotless i
 });

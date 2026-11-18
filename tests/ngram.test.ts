@@ -1,13 +1,14 @@
-import { assertEquals } from "@std/assert";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import { createNgrams } from "../src/lib/ngram.ts";
 
-Deno.test("ngram works", () => {
+test("ngram works", () => {
 	let ng = createNgrams("foo");
-	assertEquals(ng, ["  f", " fo", "foo", "oo ", "o  "]);
+	assert.deepStrictEqual(ng, ["  f", " fo", "foo", "oo ", "o  "]);
 
 	ng = createNgrams("foo", 3, { padChar: "" });
-	assertEquals(ng, ["foo"]);
+	assert.deepStrictEqual(ng, ["foo"]);
 
 	ng = createNgrams("foo", 2, { padChar: "" });
-	assertEquals(ng, ["fo", "oo"]);
+	assert.deepStrictEqual(ng, ["fo", "oo"]);
 });
