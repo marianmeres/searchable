@@ -5,37 +5,34 @@
  * Croatian/Vietnamese `đ`, Turkish dotless `ı`, etc.
  */
 const EXTRA_FOLDS: Record<string, string> = {
-	"ß": "ss",
-	"ẞ": "SS",
-	"ø": "o",
-	"Ø": "O",
-	"æ": "ae",
-	"Æ": "AE",
-	"œ": "oe",
-	"Œ": "OE",
-	"đ": "d",
-	"Đ": "D",
-	"ð": "d",
-	"Ð": "D",
-	"ł": "l",
-	"Ł": "L",
-	"þ": "th",
-	"Þ": "Th",
-	"ħ": "h",
-	"Ħ": "H",
-	"ı": "i",
-	"ĸ": "k",
-	"ŋ": "n",
-	"Ŋ": "N",
-	"ſ": "s",
-	"ŧ": "t",
-	"Ŧ": "T",
+	ß: "ss",
+	ẞ: "SS",
+	ø: "o",
+	Ø: "O",
+	æ: "ae",
+	Æ: "AE",
+	œ: "oe",
+	Œ: "OE",
+	đ: "d",
+	Đ: "D",
+	ð: "d",
+	Ð: "D",
+	ł: "l",
+	Ł: "L",
+	þ: "th",
+	Þ: "Th",
+	ħ: "h",
+	Ħ: "H",
+	ı: "i",
+	ĸ: "k",
+	ŋ: "n",
+	Ŋ: "N",
+	ſ: "s",
+	ŧ: "t",
+	Ŧ: "T",
 };
 
-const EXTRA_FOLDS_RE = new RegExp(
-	`[${Object.keys(EXTRA_FOLDS).join("")}]`,
-	"g"
-);
+const EXTRA_FOLDS_RE = new RegExp(`[${Object.keys(EXTRA_FOLDS).join("")}]`, "g");
 
 /**
  * Removes diacritical marks (accents) from a string.

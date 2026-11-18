@@ -46,7 +46,7 @@ export abstract class Index {
 	abstract searchByPrefix(prefix: string): string[];
 	abstract searchByPrefix(
 		prefix: string,
-		returnWithDistance: true
+		returnWithDistance: true,
 	): Record<string, number>;
 
 	/** Search for docIds containing words similar to the query using a distance function. */
@@ -54,13 +54,13 @@ export abstract class Index {
 	abstract searchFuzzy(
 		word: string,
 		maxDistance: number,
-		returnWithDistance: true
+		returnWithDistance: true,
 	): Record<string, number>;
 	abstract searchFuzzy(
 		word: string,
 		maxDistance: number,
 		returnWithDistance: boolean,
-		options: FuzzyOptions
+		options: FuzzyOptions,
 	): string[] | Record<string, number>;
 
 	/** Search for all words associated with a docId. */
@@ -71,6 +71,6 @@ export abstract class Index {
 
 	/** Restores the index from a dump structure */
 	abstract restore(
-		data: string | { version?: string; words: Record<string, string[]> }
+		data: string | { version?: string; words: Record<string, string[]> },
 	): boolean;
 }

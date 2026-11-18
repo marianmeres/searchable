@@ -32,7 +32,7 @@ function escapeForCharClass(c: string): string {
  */
 export function tokenize(
 	inputString: string,
-	nonWordCharWhitelist: string = ""
+	nonWordCharWhitelist: string = "",
 ): string[] {
 	if (typeof inputString !== "string") return [];
 	if (typeof nonWordCharWhitelist !== "string") nonWordCharWhitelist = "";
@@ -51,10 +51,7 @@ export function tokenize(
 	// \p{L} - any Unicode letter
 	// \p{N} - any Unicode number/digit
 	// \p{Pc} - connecting punctuation (underscore etc.)
-	const wordPattern = new RegExp(
-		`[^\\p{L}\\p{N}\\p{Pc}${escaped}]+`,
-		"gu"
-	);
+	const wordPattern = new RegExp(`[^\\p{L}\\p{N}\\p{Pc}${escaped}]+`, "gu");
 
 	return inputString.split(wordPattern).filter((word) => word.length > 0);
 }

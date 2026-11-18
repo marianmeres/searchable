@@ -1,8 +1,4 @@
-import {
-	type DistanceFn,
-	type FuzzyOptions,
-	type Index,
-} from "./lib/index-abstract.ts";
+import type { DistanceFn, FuzzyOptions, Index } from "./lib/index-abstract.ts";
 import { intersect } from "./lib/intersect.ts";
 import { createNgrams, InvertedIndex, TrieIndex } from "./lib/mod.ts";
 import { normalize } from "./lib/normalize.ts";
@@ -92,7 +88,7 @@ export interface MergedSearchable {
 	searchFuzzy: (
 		query: string,
 		maxDistance?: number,
-		options?: SearchOptions
+		options?: SearchOptions,
 	) => string[];
 }
 
@@ -159,9 +155,7 @@ export class Searchable {
 		};
 
 		this.#index =
-			this.#options.index === "inverted"
-				? new InvertedIndex()
-				: new TrieIndex();
+			this.#options.index === "inverted" ? new InvertedIndex() : new TrieIndex();
 	}
 
 	/**
@@ -169,10 +163,7 @@ export class Searchable {
 	 * index-agnostic, so you may pick a different `index` implementation at
 	 * restore time (e.g. migrate inverted ↔ trie).
 	 */
-	static fromDump(
-		dump: any,
-		options: Partial<SearchableOptions> = {}
-	): Searchable {
+	static fromDump(dump: any, options: Partial<SearchableOptions> = {}): Searchable {
 		const idx = new Searchable(options);
 		idx.restore(dump);
 		return idx;
@@ -284,7 +275,7 @@ export class Searchable {
 	toQueryGroups(input: string): string[][] {
 		const norm = normalize(input, this.#normalizeOptions);
 		const tokens = tokenize(norm, this.#options.nonWordCharWhitelist).filter(
-			(w) => w && !this.#options.isStopword(w)
+			(w) => w && !this.#options.isStopword(w),
 		);
 
 		const groups: string[][] = [];
@@ -373,14 +364,12 @@ export class Searchable {
 	 */
 	addBatch(
 		documents: [string, string][] | Record<string, string>,
-		strict = false
+		strict = false,
 	): { added: number; errors: Array<{ docId: string; error: Error }> } {
 		const errors: Array<{ docId: string; error: Error }> = [];
 		let added = 0;
 
-		const entries = Array.isArray(documents)
-			? documents
-			: Object.entries(documents);
+		const entries = Array.isArray(documents) ? documents : Object.entries(documents);
 
 		for (const [docId, input] of entries) {
 			try {
@@ -400,7 +389,7 @@ export class Searchable {
 	/** Internal worker signature — either an array of ids, or a distance-keyed map. */
 	#runSearch(
 		worker: (word: string) => string[] | Record<string, number>,
-		query: string
+		query: string,
 	): string[] {
 		const { querySomeWordMinLength, lastQueryHistoryLength } = this.#options;
 
@@ -411,24 +400,18 @@ export class Searchable {
 		const groups = this.toQueryGroups(query);
 		const normalizedQuery = normalize(query, this.#normalizeOptions);
 
-		if (
-			!groups.some((g) =>
-				g.some((w) => w.length >= querySomeWordMinLength)
-			)
-		) {
+		if (!groups.some((g) => g.some((w) => w.length >= querySomeWordMinLength))) {
 			return [];
 		}
 
 		this.#lastQuery.used = normalizedQuery;
 		if (lastQueryHistoryLength > 0) {
-			this.#lastQuery.history = [
-				...this.#lastQuery.history,
-				normalizedQuery,
-			].slice(-lastQueryHistoryLength);
-			this.#lastQuery.rawHistory = [
-				...this.#lastQuery.rawHistory,
-				rawInput,
-			].slice(-lastQueryHistoryLength);
+			this.#lastQuery.history = [...this.#lastQuery.history, normalizedQuery].slice(
+				-lastQueryHistoryLength,
+			);
+			this.#lastQuery.rawHistory = [...this.#lastQuery.rawHistory, rawInput].slice(
+				-lastQueryHistoryLength,
+			);
 		} else {
 			this.#lastQuery.history = [];
 			this.#lastQuery.rawHistory = [];
@@ -482,10 +465,7 @@ export class Searchable {
 
 	/** Searches the index for documents containing exact word matches. */
 	searchExact(query: string, options?: SearchOptions): string[] {
-		const ids = this.#runSearch(
-			(word) => this.#index.searchExact(word),
-			query
-		);
+		const ids = this.#runSearch((word) => this.#index.searchExact(word), query);
 		return this.#applyWindow(ids, options);
 	}
 
@@ -496,7 +476,7 @@ export class Searchable {
 	searchByPrefix(query: string, options?: SearchOptions): string[] {
 		const ids = this.#runSearch(
 			(word) => this.#index.searchByPrefix(word, true),
-			query
+			query,
 		);
 		return this.#applyWindow(ids, options);
 	}
@@ -514,17 +494,18 @@ export class Searchable {
 	searchFuzzy(
 		query: string,
 		maxDistance: number = 2,
-		options?: SearchOptions
+		options?: SearchOptions,
 	): string[] {
-		const fuzzyOpts: FuzzyOptions | undefined =
-			options?.distanceFn ? { distanceFn: options.distanceFn } : undefined;
+		const fuzzyOpts: FuzzyOptions | undefined = options?.distanceFn
+			? { distanceFn: options.distanceFn }
+			: undefined;
 
 		const ids = this.#runSearch(
 			(word) =>
 				fuzzyOpts
 					? this.#index.searchFuzzy(word, maxDistance, true, fuzzyOpts)
 					: this.#index.searchFuzzy(word, maxDistance, true),
-			query
+			query,
 		);
 		return this.#applyWindow(ids, options);
 	}
@@ -533,13 +514,11 @@ export class Searchable {
 	search(
 		query: string,
 		strategy?: "exact" | "prefix" | "fuzzy",
-		options?: SearchOptions
+		options?: SearchOptions,
 	): string[] {
 		strategy ??= this.#options.defaultSearchOptions.strategy ?? "prefix";
 		const maxDistance =
-			options?.maxDistance ??
-			this.#options.defaultSearchOptions.maxDistance ??
-			2;
+			options?.maxDistance ?? this.#options.defaultSearchOptions.maxDistance ?? 2;
 		const distanceFn =
 			options?.distanceFn ?? this.#options.defaultSearchOptions.distanceFn;
 
@@ -566,12 +545,10 @@ export class Searchable {
 		const raw = query;
 		const normalized = normalize(query, this.#normalizeOptions);
 		const tokens = tokenize(normalized, this.#options.nonWordCharWhitelist);
-		const afterStopwords = tokens.filter(
-			(w) => w && !this.#options.isStopword(w)
-		);
+		const afterStopwords = tokens.filter((w) => w && !this.#options.isStopword(w));
 		const groups = this.toQueryGroups(query);
 		const wouldSearch = groups.some((g) =>
-			g.some((w) => w.length >= this.#options.querySomeWordMinLength)
+			g.some((w) => w.length >= this.#options.querySomeWordMinLength),
 		);
 		return { raw, normalized, tokens, afterStopwords, groups, wouldSearch };
 	}

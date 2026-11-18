@@ -16,6 +16,7 @@
 ## Purpose
 
 High-performance in-memory text search library for:
+
 - Autocomplete / typeahead features
 - Document filtering
 - Fuzzy text matching
@@ -202,24 +203,24 @@ function intersect<T>(...arrays: (readonly T[])[]): T[]
 
 ## Search Strategies
 
-| Strategy | Inverted | Trie | Use Case |
-|----------|----------|------|----------|
-| exact    | O(1) hash | O(k) traversal | Known exact terms |
-| prefix   | O(n) scan | O(k + subtree) | Autocomplete, typeahead |
-| fuzzy    | O(n·m) scan | O(pruned walk) — usually much smaller than n·m | Typo tolerance |
+| Strategy | Inverted    | Trie                                           | Use Case                |
+| -------- | ----------- | ---------------------------------------------- | ----------------------- |
+| exact    | O(1) hash   | O(k) traversal                                 | Known exact terms       |
+| prefix   | O(n) scan   | O(k + subtree)                                 | Autocomplete, typeahead |
+| fuzzy    | O(n·m) scan | O(pruned walk) — usually much smaller than n·m | Typo tolerance          |
 
 Where: n = total words, k = query length, m = average word length.
 
 ## Index Implementation Comparison
 
-| Feature | InvertedIndex | TrieIndex |
-|---------|---------------|-----------|
-| Exact search | O(1) | O(k) |
-| Prefix search | O(n) | O(k + matches) |
-| Fuzzy search | O(n·m) linear | pruned trie walk, typically faster for vocabularies with many shared prefixes |
-| Memory | lower | higher (one node per char per path, ~160 B per unique indexed char) |
-| Word length | unbounded | unbounded: every walk is iterative, so a 100k-char token is fine |
-| Recommended for | small indexes / simple use | autocomplete / fuzzy heavy / large vocabularies |
+| Feature         | InvertedIndex              | TrieIndex                                                                     |
+| --------------- | -------------------------- | ----------------------------------------------------------------------------- |
+| Exact search    | O(1)                       | O(k)                                                                          |
+| Prefix search   | O(n)                       | O(k + matches)                                                                |
+| Fuzzy search    | O(n·m) linear              | pruned trie walk, typically faster for vocabularies with many shared prefixes |
+| Memory          | lower                      | higher (one node per char per path, ~160 B per unique indexed char)           |
+| Word length     | unbounded                  | unbounded: every walk is iterative, so a 100k-char token is fine              |
+| Recommended for | small indexes / simple use | autocomplete / fuzzy heavy / large vocabularies                               |
 
 `TrieIndex` walk order is a contract: pre-order (a node, then its children in
 insertion order). It fixes `getAllWords()` / `dump()` order and the tie-break
@@ -321,6 +322,7 @@ pnpm run rpm                 # Release minor + publish npm and JSR (human action
 ## Common Patterns
 
 ### Basic usage
+
 ```typescript
 const idx = new Searchable();
 idx.add("searchable text", "doc-id");
@@ -328,17 +330,20 @@ idx.search("query");
 ```
 
 ### Persistence with index-type swap
+
 ```typescript
 const dumped = fromInverted.dump();
 const trie = Searchable.fromDump(dumped, { index: "trie" });
 ```
 
 ### Update in place
+
 ```typescript
 idx.replace("doc-id", "new text");
 ```
 
 ### Custom distance
+
 ```typescript
 import { levenshteinDistance } from "@marianmeres/searchable";
 const damerau = (a, b) => levenshteinDistance(a, b, { damerau: true });
@@ -346,23 +351,27 @@ idx.search("recieve", "fuzzy", { maxDistance: 1, distanceFn: damerau });
 ```
 
 ### Pagination
+
 ```typescript
 idx.search("apple", "prefix", { limit: 10, offset: 20 });
 ```
 
 ### Debugging
+
 ```typescript
 idx.explainQuery("The Hello World!");
 // → { raw, normalized, tokens, afterStopwords, groups, wouldSearch }
 ```
 
 ### Multiple indexes
+
 ```typescript
 const merged = Searchable.merge([idx1, idx2]);
 merged.searchByPrefix("query", { limit: 10 });
 ```
 
 ### Export trie to nested object (e.g. JSONB)
+
 ```typescript
 const trie = idx.__index as TrieIndex;       // requires index: "trie"
 trie.toCharTrie();                           // { b: { a: { r: { n: {} } } } } (char-only)
@@ -384,6 +393,7 @@ trie.toCharTrie({ terminalMarker: true });   // adds "$$" end-of-word marker per
 ## Version history of behavior-impacting changes
 
 See [BC.md](BC.md) for full details. Headline changes in 2.5.0:
+
 - `normalizeWord` now also runs at query time (groups → OR within / AND across).
 - `unaccent` folds ß, ø, æ, œ, đ, ł, þ, ð, ı, ...
 - Levenshtein iterates code points (astral-safe) and supports Damerau mode.

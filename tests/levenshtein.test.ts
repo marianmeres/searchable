@@ -17,7 +17,11 @@ test("levenshtein distance works", () => {
 		] as TestInput
 	).forEach(([source, target, expected]) => {
 		const actual = levenshteinDistance(source, target);
-		assert.deepStrictEqual(actual, expected, [source, target, actual, expected].join());
+		assert.deepStrictEqual(
+			actual,
+			expected,
+			[source, target, actual, expected].join(),
+		);
 	});
 });
 
@@ -34,7 +38,10 @@ test("levenshtein handles astral characters as single code points", () => {
 test("levenshtein damerau option recognises transpositions", () => {
 	assert.deepStrictEqual(levenshteinDistance("teh", "the"), 2);
 	assert.deepStrictEqual(levenshteinDistance("teh", "the", { damerau: true }), 1);
-	assert.deepStrictEqual(levenshteinDistance("recieve", "receive", { damerau: true }), 1);
+	assert.deepStrictEqual(
+		levenshteinDistance("recieve", "receive", { damerau: true }),
+		1,
+	);
 	// pure substitutions should still work
 	assert.deepStrictEqual(levenshteinDistance("cat", "hat", { damerau: true }), 1);
 });

@@ -1,4 +1,4 @@
-import { Index, type DistanceFn, type FuzzyOptions } from "./index-abstract.ts";
+import { type DistanceFn, type FuzzyOptions, Index } from "./index-abstract.ts";
 import { levenshteinDistance } from "./levenshtein.ts";
 
 const defaultDistanceFn: DistanceFn = (a, b) => levenshteinDistance(a, b);
@@ -131,13 +131,10 @@ export class InvertedIndex extends Index {
 
 	/** Search for docIds containing words with the given prefix. */
 	searchByPrefix(prefix: string): string[];
+	searchByPrefix(prefix: string, returnWithDistance: true): Record<string, number>;
 	searchByPrefix(
 		prefix: string,
-		returnWithDistance: true
-	): Record<string, number>;
-	searchByPrefix(
-		prefix: string,
-		returnWithDistance: boolean = false
+		returnWithDistance: boolean = false,
 	): string[] | Record<string, number> {
 		const idToDistance = new Map<string, number>();
 		// For a true prefix match, levenshtein(prefix, word) == codepoint-length diff.
@@ -158,7 +155,7 @@ export class InvertedIndex extends Index {
 			return Object.fromEntries(idToDistance.entries());
 		}
 		return [...idToDistance.keys()].sort(
-			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
+			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!,
 		);
 	}
 
@@ -176,19 +173,19 @@ export class InvertedIndex extends Index {
 	searchFuzzy(
 		word: string,
 		maxDistance: number,
-		returnWithDistance: true
+		returnWithDistance: true,
 	): Record<string, number>;
 	searchFuzzy(
 		word: string,
 		maxDistance: number,
 		returnWithDistance: boolean,
-		options: FuzzyOptions
+		options: FuzzyOptions,
 	): string[] | Record<string, number>;
 	searchFuzzy(
 		word: string,
 		maxDistance: number = 2,
 		returnWithDistance: boolean = false,
-		options: FuzzyOptions = {}
+		options: FuzzyOptions = {},
 	): string[] | Record<string, number> {
 		const distanceFn = options.distanceFn ?? defaultDistanceFn;
 		const queryLen = [...word].length;
@@ -219,7 +216,7 @@ export class InvertedIndex extends Index {
 			return Object.fromEntries(idToDistance.entries());
 		}
 		return [...idToDistance.keys()].sort(
-			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
+			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!,
 		);
 	}
 
@@ -241,7 +238,7 @@ export class InvertedIndex extends Index {
 	 * Throws `Error` (with `cause` set to the underlying error) on JSON / structural failure.
 	 */
 	restore(
-		data: string | { version?: string; words: Record<string, string[]> }
+		data: string | { version?: string; words: Record<string, string[]> },
 	): boolean {
 		try {
 			if (typeof data === "string") {
@@ -257,7 +254,7 @@ export class InvertedIndex extends Index {
 
 			if (data.version !== undefined && data.version !== "1.0") {
 				throw new Error(
-					`Unsupported dump version "${data.version}" (expected "1.0")`
+					`Unsupported dump version "${data.version}" (expected "1.0")`,
 				);
 			}
 

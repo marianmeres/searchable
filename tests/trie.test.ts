@@ -89,7 +89,12 @@ test("trie fuzzy search", () => {
 	// console.log(idx.dump());
 
 	let res = idx.searchFuzzy("hel", 3);
-	assert.deepStrictEqual(res, ["6" /*hell*/, "0" /*hello*/, "5" /*hello*/, "1" /*ehlo*/]);
+	assert.deepStrictEqual(res, [
+		"6" /*hell*/,
+		"0" /*hello*/,
+		"5" /*hello*/,
+		"1" /*ehlo*/,
+	]);
 
 	const res2 = idx.searchFuzzy("hel", 3, true);
 	assert.deepStrictEqual(res2, { 0: 2, 1: 3, 5: 2, 6: 1 });

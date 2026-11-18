@@ -1,7 +1,7 @@
 # Term frequency / ranking — design analysis (proposed, not implemented)
 
 **Status:** Proposed. Nothing here is built. This document captures the analysis
-behind a possible *term-frequency* (TF) capability so the decision and its cost
+behind a possible _term-frequency_ (TF) capability so the decision and its cost
 are recorded before any code is written.
 
 **Related, already shipped:** the end-of-word terminal marker in
@@ -29,7 +29,7 @@ document frequency, for TF-IDF / BM25-style scoring.
 The terminal marker was cheap because the information **already existed**:
 every `TrieNode` carries `isEOW`
 ([index-trie.ts](../src/lib/index-trie.ts), `TrieNode`), and `searchExact`
-already relies on it. The only gap was that the char-trie *projection* discarded
+already relies on it. The only gap was that the char-trie _projection_ discarded
 it. Exposing it was a few lines and changed no data structures.
 
 Term frequency is the opposite: **nothing in the library counts anything.** Two
@@ -46,8 +46,8 @@ layers actively destroy multiplicity before it could ever be recorded:
 So TF is not a `TrieNode` tweak; capturing it reaches **up into the tokenization
 layer** as well.
 
-> **Already free today:** *document frequency* (DF) — the number of documents
-> containing a word — is `node.docIds.size`. Only *per-document term frequency*
+> **Already free today:** _document frequency_ (DF) — the number of documents
+> containing a word — is `node.docIds.size`. Only _per-document term frequency_
 > is missing. If a use case only needs DF-style weighting, none of the work
 > below is required.
 
@@ -55,18 +55,18 @@ layer** as well.
 
 ## 3. Semantics: decide before implementing
 
-| Quantity | Definition | Scope | Where it can live |
-|----------|------------|-------|-------------------|
-| **TF** (term frequency) | occurrences of a word **within one document** | per document | a per-document structure (trie node, or a flat `{word: count}` map) |
-| **DF** (document frequency) | number of documents containing a word | corpus-wide | the shared in-memory index (`docIds.size`); **not** a per-document export |
-| **IDF** | `log(N / DF)` | corpus-wide | computed from `N` (doc count) + DF; never inside a single document's payload |
+| Quantity                    | Definition                                    | Scope        | Where it can live                                                            |
+| --------------------------- | --------------------------------------------- | ------------ | ---------------------------------------------------------------------------- |
+| **TF** (term frequency)     | occurrences of a word **within one document** | per document | a per-document structure (trie node, or a flat `{word: count}` map)          |
+| **DF** (document frequency) | number of documents containing a word         | corpus-wide  | the shared in-memory index (`docIds.size`); **not** a per-document export    |
+| **IDF**                     | `log(N / DF)`                                 | corpus-wide  | computed from `N` (doc count) + DF; never inside a single document's payload |
 
 Consequences:
 
 - A **per-document** serialized payload (e.g. one JSONB column per row) can only
   ever carry **TF** (plus optionally document length / max-TF for
   normalization). Trying to bake DF/IDF into each document's payload means every
-  insert anywhere rewrites a field in *every other* document — a corpus-wide
+  insert anywhere rewrites a field in _every other_ document — a corpus-wide
   write-amplification trap. DF/IDF must be derived corpus-side at query time.
 - The **shared in-memory index** already knows DF for free and could expose it.
 
@@ -81,7 +81,7 @@ The right design depends entirely on **who consumes the frequency**:
 Results are returned ranked by relevance, not just by edit distance. This is a
 legitimate, natural evolution of a search library and **justifies putting TF in
 the data model**. But to be coherent it must be designed at the `Index`
-abstraction level so **both** backends gain it — the *default* backend is the
+abstraction level so **both** backends gain it — the _default_ backend is the
 inverted index ([index-inverted.ts](../src/lib/index-inverted.ts)), not the
 trie. A trie-only frequency feature would be asymmetric and surprising. It also
 forces a decision on how TF combines with the existing distance-based ordering
@@ -132,7 +132,7 @@ id-list return paths; the ranked variants can additionally surface the count.
 TF only becomes non-trivial if the same normalized word reaches the index more
 than once. Today `toWords` de-dups per `add()`
 ([searchable.ts:269](../src/searchable.ts#L269)). Capturing true TF requires
-counting occurrences *before* (or instead of) that `new Set`. This is a
+counting occurrences _before_ (or instead of) that `new Set`. This is a
 **behavior change**, so it must be **opt-in** (e.g. a `countTermFrequency`
 factory option, default `false`) to preserve current behavior. n-gram emission
 ([searchable.ts `add`](../src/searchable.ts)) interacts here too — decide
@@ -177,7 +177,7 @@ same mechanism in one of two ways:
 
 ### 6.1 Count as the sentinel value
 
-Let the terminal marker's *value* carry the count instead of `true`:
+Let the terminal marker's _value_ carry the count instead of `true`:
 
 ```jsonc
 { "b": { "a": { "r": { "$$": 3 }, "z": { "$$": 1 } } } }
@@ -200,13 +200,13 @@ Emit the counts as a flat word→count map alongside the trie:
 ```
 
 The flat map is the simpler home for exact-match + ranking; the trie's unique
-value is cheap **prefix** probing. If prefix probing is *not* needed by the
+value is cheap **prefix** probing. If prefix probing is _not_ needed by the
 consumer, the trie can be dropped entirely in favor of the flat map. **Do not
 store TF in both places.**
 
 ### 6.3 Not worth it: per-node subtree aggregates
 
-Storing the summed subtree TF at every interior node (to rank *prefix* matches
+Storing the summed subtree TF at every interior node (to rank _prefix_ matches
 in one lookup) requires updating the whole path to the root on every edit and
 negates the trie's compactness. Reserve subtree aggregation for an in-memory
 ranker, not the serialized projection.
@@ -233,7 +233,7 @@ If the end goal is corpus-aware relevance ranking inside a database, note that
 PostgreSQL's native full-text search (`tsvector` / `ts_rank` / `ts_rank_cd`)
 already stores per-document term positions (hence TF), supports A/B/C/D field
 weights and proximity ranking, and is GIN-indexable — and it can be fed
-*app-supplied lexemes* (via the `'lexeme:position'::tsvector` literal form) so
+_app-supplied lexemes_ (via the `'lexeme:position'::tsvector` literal form) so
 this library can remain the single source of normalization. A hand-rolled
 TF-in-JSONB layer reimplements a weaker, unindexed-for-ordering version of that.
 

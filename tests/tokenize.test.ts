@@ -1,6 +1,6 @@
-import { tokenize } from "../src/lib/tokenize.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { tokenize } from "../src/lib/tokenize.ts";
 
 const clog = console.log;
 

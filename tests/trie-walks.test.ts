@@ -29,7 +29,9 @@ test("trie - a 100 000-char word goes through every method", () => {
 	assert.deepStrictEqual(idx.searchFuzzy("d", LONG), ["3", "2", "1"]);
 	assert.deepStrictEqual(idx.searchFuzzy("d", LONG, true), distances);
 	const byLength = (_: string, b: string) => (b.length === LONG ? 0 : 9);
-	assert.deepStrictEqual(idx.searchFuzzy("d", 0, false, { distanceFn: byLength }), ["1"]);
+	assert.deepStrictEqual(idx.searchFuzzy("d", 0, false, { distanceFn: byLength }), [
+		"1",
+	]);
 
 	const restored = new TrieIndex();
 	assert.ok(restored.restore(JSON.stringify(idx.dump())));
@@ -57,7 +59,7 @@ test("trie - a 100 000-char word goes through every method", () => {
 				isEOW: false,
 				docIds: [],
 			},
-		})
+		}),
 	);
 });
 
@@ -69,7 +71,10 @@ test("searchable (trie) - a 100 000-char token", () => {
 	assert.ok(s.__index.getAllWords().includes(long));
 	assert.deepStrictEqual(s.search("dd", "prefix"), ["1"]);
 	assert.deepStrictEqual(s.search("helo", "fuzzy"), ["1"]);
-	assert.deepStrictEqual(Searchable.fromDump(s.dump(), { index: "trie" }).search("dd"), ["1"]);
+	assert.deepStrictEqual(
+		Searchable.fromDump(s.dump(), { index: "trie" }).search("dd"),
+		["1"],
+	);
 
 	s.replace("1", "short");
 	assert.deepStrictEqual(s.__index.getAllWords(), ["short"]);
@@ -165,7 +170,7 @@ test("trie - walk order matches the recursive reference", () => {
 				refWalk(ref, "", (word, n) => {
 					const d = levenshteinDistance(query, word);
 					if (d <= 2) record(n.ids, d);
-				})
+				}),
 			);
 			assert.deepStrictEqual(idx.searchFuzzy(query, 2), expectedFuzzy);
 		}

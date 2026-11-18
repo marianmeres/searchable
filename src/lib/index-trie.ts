@@ -1,4 +1,4 @@
-import { Index, type DistanceFn, type FuzzyOptions } from "./index-abstract.ts";
+import { type DistanceFn, type FuzzyOptions, Index } from "./index-abstract.ts";
 import { levenshteinDistance } from "./levenshtein.ts";
 
 const defaultDistanceFn: DistanceFn = (a, b) => levenshteinDistance(a, b);
@@ -36,9 +36,7 @@ export interface CharTrieOptions {
  *
  * @throws {Error} If a custom sentinel shorter than 2 code points is given.
  */
-function resolveTerminalMarker(
-	marker: CharTrieOptions["terminalMarker"]
-): string | null {
+function resolveTerminalMarker(marker: CharTrieOptions["terminalMarker"]): string | null {
 	if (!marker) return null;
 	const sentinel = marker === true ? DEFAULT_TERMINAL_MARKER : marker;
 	// Count code points (not UTF-16 units): a single emoji is one code point and
@@ -47,7 +45,7 @@ function resolveTerminalMarker(
 		throw new Error(
 			`Invalid terminalMarker ${JSON.stringify(sentinel)}: must be at ` +
 				`least 2 code points long, since real trie edges are single code ` +
-				`points and a shorter key could collide with one.`
+				`points and a shorter key could collide with one.`,
 		);
 	}
 	return sentinel;
@@ -113,7 +111,7 @@ class TrieNode {
 function recordMinDistance(
 	idToDistance: Map<string, number>,
 	docIds: Set<string>,
-	distance: number
+	distance: number,
 ) {
 	docIds.forEach((id) => {
 		const prev = idToDistance.get(id);
@@ -289,13 +287,10 @@ export class TrieIndex extends Index {
 
 	/** Search for documents containing words with the given prefix. */
 	searchByPrefix(prefix: string): string[];
+	searchByPrefix(prefix: string, returnWithDistance: true): Record<string, number>;
 	searchByPrefix(
 		prefix: string,
-		returnWithDistance: true
-	): Record<string, number>;
-	searchByPrefix(
-		prefix: string,
-		returnWithDistance: boolean = false
+		returnWithDistance: boolean = false,
 	): string[] | Record<string, number> {
 		const node = this.#findNode(prefix);
 		if (!node) return [];
@@ -307,7 +302,7 @@ export class TrieIndex extends Index {
 			return Object.fromEntries(idToDistance.entries());
 		}
 		return [...idToDistance.keys()].sort(
-			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
+			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!,
 		);
 	}
 
@@ -329,19 +324,19 @@ export class TrieIndex extends Index {
 	searchFuzzy(
 		word: string,
 		maxDistance: number,
-		returnWithDistance: true
+		returnWithDistance: true,
 	): Record<string, number>;
 	searchFuzzy(
 		word: string,
 		maxDistance: number,
 		returnWithDistance: boolean,
-		options: FuzzyOptions
+		options: FuzzyOptions,
 	): string[] | Record<string, number>;
 	searchFuzzy(
 		word: string,
 		maxDistance: number = 2,
 		returnWithDistance: boolean = false,
-		options: FuzzyOptions = {}
+		options: FuzzyOptions = {},
 	): string[] | Record<string, number> {
 		const idToDistance = new Map<string, number>();
 
@@ -362,7 +357,7 @@ export class TrieIndex extends Index {
 			return Object.fromEntries(idToDistance.entries());
 		}
 		return [...idToDistance.keys()].sort(
-			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!
+			(a, b) => idToDistance.get(a)! - idToDistance.get(b)!,
 		);
 	}
 
@@ -378,11 +373,7 @@ export class TrieIndex extends Index {
 	 * DFS over the trie maintaining the current Levenshtein row for the query.
 	 * Prunes subtrees whose row minimum exceeds `maxDistance`.
 	 */
-	#fuzzyWalk(
-		query: string,
-		maxDistance: number,
-		idToDistance: Map<string, number>
-	) {
+	#fuzzyWalk(query: string, maxDistance: number, idToDistance: Map<string, number>) {
 		const qChars = [...query];
 		const qLen = qChars.length;
 
@@ -417,7 +408,7 @@ export class TrieIndex extends Index {
 				newRow[j] = Math.min(
 					prevRow[j] + 1,
 					newRow[j - 1] + 1,
-					prevRow[j - 1] + cost
+					prevRow[j - 1] + cost,
 				);
 				if (newRow[j] < rowMin) rowMin = newRow[j];
 			}
@@ -546,7 +537,7 @@ export class TrieIndex extends Index {
 	/** Restores the index from a dump structure. Throws on malformed data
 	 * (original error preserved via `cause`). */
 	restore(
-		data: string | { version?: string; words: Record<string, string[]> }
+		data: string | { version?: string; words: Record<string, string[]> },
 	): boolean {
 		try {
 			if (typeof data === "string") {
@@ -562,7 +553,7 @@ export class TrieIndex extends Index {
 
 			if (data.version !== undefined && data.version !== "1.0") {
 				throw new Error(
-					`Unsupported dump version "${data.version}" (expected "1.0")`
+					`Unsupported dump version "${data.version}" (expected "1.0")`,
 				);
 			}
 

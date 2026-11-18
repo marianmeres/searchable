@@ -21,7 +21,7 @@ synonym expansion), query terms become groups: **OR within a group, AND across
 groups**.
 
 **What to check:** if you used `normalizeWord` for indexing-only shaping that
-should *not* apply to queries, you'll need to gate it yourself (e.g. return the
+should _not_ apply to queries, you'll need to gate it yourself (e.g. return the
 input unchanged for words that don't need the transform). In practice this is
 rare — the original design clearly intended symmetric behavior.
 
@@ -66,7 +66,7 @@ did a linear scan — strictly slower than the inverted index.
 benchmark this dropped trie fuzzy from ~69ms/iter to ~3.4ms/iter (~20×), making
 it the fastest fuzzy strategy.
 
-**What to check:** result *ordering* by distance is stable; tie-breaks within
+**What to check:** result _ordering_ by distance is stable; tie-breaks within
 the same distance may differ from before (both old and new outputs are
 correct — the order between equally-good matches wasn't specified).
 
@@ -94,7 +94,7 @@ tolerance with pre-2.5.0 dumps) throws a descriptive error.
 Raw (pre-normalization) query strings are now kept alongside `history`.
 Matches `history` length and ordering one-to-one.
 
-**What to check:** TypeScript code that *constructs* a `LastQuery` manually
+**What to check:** TypeScript code that _constructs_ a `LastQuery` manually
 (e.g. inside a test fixture) must add the `rawHistory` field. Runtime consumers
 are unaffected; the getter now returns a shallow copy (see #9).
 

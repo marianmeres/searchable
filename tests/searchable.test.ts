@@ -175,12 +175,15 @@ test("addBatch works with object", () => {
 test("addBatch handles errors in non-strict mode", () => {
 	const index = new Searchable();
 
-	const result = index.addBatch([
-		["doc1", "valid text"],
-		["", "invalid docId"], // This should error
-		["doc2", ""], // This should error
-		["doc3", "another valid text"],
-	], false); // non-strict mode
+	const result = index.addBatch(
+		[
+			["doc1", "valid text"],
+			["", "invalid docId"], // This should error
+			["doc2", ""], // This should error
+			["doc3", "another valid text"],
+		],
+		false,
+	); // non-strict mode
 
 	// Should have added the valid entries
 	assert.deepStrictEqual(result.added > 0, true);
@@ -245,7 +248,7 @@ test("merged works", () => {
 				"@" + row.email.split("@")[1], // domain part only
 				row.name,
 			].join(" "),
-			docId
+			docId,
 		);
 		fuzzy.add(row.songs, docId);
 	});

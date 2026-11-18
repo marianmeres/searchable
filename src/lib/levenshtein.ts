@@ -40,7 +40,7 @@ export interface LevenshteinOptions {
 export function levenshteinDistance(
 	source: string,
 	target: string,
-	options: LevenshteinOptions = {}
+	options: LevenshteinOptions = {},
 ): number {
 	// Iterate code points, not UTF-16 units — otherwise astral characters
 	// (emoji, some CJK, math alphanumerics) miscount as two characters each.
@@ -69,14 +69,9 @@ export function levenshteinDistance(
 				let v = Math.min(
 					matrix[i - 1][j] + 1,
 					matrix[i][j - 1] + 1,
-					matrix[i - 1][j - 1] + cost
+					matrix[i - 1][j - 1] + cost,
 				);
-				if (
-					i > 1 &&
-					j > 1 &&
-					s[i - 1] === t[j - 2] &&
-					s[i - 2] === t[j - 1]
-				) {
+				if (i > 1 && j > 1 && s[i - 1] === t[j - 2] && s[i - 2] === t[j - 1]) {
 					v = Math.min(v, matrix[i - 2][j - 2] + 1);
 				}
 				matrix[i][j] = v;
@@ -94,11 +89,7 @@ export function levenshteinDistance(
 		curr[0] = i;
 		for (let j = 1; j <= n; j++) {
 			const cost = s[i - 1] === t[j - 1] ? 0 : 1;
-			curr[j] = Math.min(
-				prev[j] + 1,
-				curr[j - 1] + 1,
-				prev[j - 1] + cost
-			);
+			curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
 		}
 		[prev, curr] = [curr, prev];
 	}

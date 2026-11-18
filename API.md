@@ -237,12 +237,12 @@ when building a new instance.
 
 ### Properties
 
-| Property | Type | Description |
-|---|---|---|
-| `wordCount` | `number` | Total unique words (including n-grams) in the index |
-| `docIdCount` | `number` | Total unique document IDs |
-| `lastQuery` | `LastQuery` | Shallow copy of the last-query metadata (see [LastQuery](#lastquery)) |
-| `__index` | `Index` | Access to the underlying concrete index (debugging) |
+| Property     | Type        | Description                                                           |
+| ------------ | ----------- | --------------------------------------------------------------------- |
+| `wordCount`  | `number`    | Total unique words (including n-grams) in the index                   |
+| `docIdCount` | `number`    | Total unique document IDs                                             |
+| `lastQuery`  | `LastQuery` | Shallow copy of the last-query metadata (see [LastQuery](#lastquery)) |
+| `__index`    | `Index`     | Access to the underlying concrete index (debugging)                   |
 
 ---
 
@@ -347,7 +347,7 @@ Trie (prefix tree) based index.
 
 #### toCharTrie
 
-*TrieIndex only* (not available on `InvertedIndex`).
+_TrieIndex only_ (not available on `InvertedIndex`).
 
 ```typescript
 toCharTrie(options?: CharTrieOptions): Record<string, any>

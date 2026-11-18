@@ -36,7 +36,7 @@ const DEFAULT_OPTIONS: {
  */
 export function normalize(
 	input: string,
-	options: Partial<typeof DEFAULT_OPTIONS> = {}
+	options: Partial<typeof DEFAULT_OPTIONS> = {},
 ): string {
 	input = `${input}`.trim();
 

@@ -3,8 +3,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Searchable, type SearchableOptions } from "../src/searchable.ts";
 import { levenshteinDistance } from "../src/lib/levenshtein.ts";
+import { Searchable, type SearchableOptions } from "../src/searchable.ts";
 
 const perIndex = (fn: (opts: Partial<SearchableOptions>) => void) =>
 	(["inverted", "trie"] as const).forEach((index) => fn({ index }));
@@ -60,7 +60,7 @@ test("trie fuzzy: Unicode + pruning give same result as inverted", () => {
 	const mk = (index: "inverted" | "trie") => {
 		const idx = new Searchable({ index });
 		["restaurant", "restart", "resting", "eating", "repeat", "restore"].forEach(
-			(w, i) => idx.add(w, `d${i}`)
+			(w, i) => idx.add(w, `d${i}`),
 		);
 		return idx;
 	};
@@ -68,7 +68,7 @@ test("trie fuzzy: Unicode + pruning give same result as inverted", () => {
 	const trie = mk("trie");
 	assert.deepStrictEqual(
 		new Set(inv.searchFuzzy("restarant", 2)),
-		new Set(trie.searchFuzzy("restarant", 2))
+		new Set(trie.searchFuzzy("restarant", 2)),
 	);
 });
 
@@ -104,7 +104,7 @@ test("trie & inverted remove astral-char words consistently", async (t) => {
 		// 😀 vs 😎 differs by 1 code-point substitution
 		assert.deepStrictEqual(
 			new Set(idx.searchFuzzy("😀cat", 1) as string[]),
-			new Set(["a", "b"])
+			new Set(["a", "b"]),
 		);
 	});
 });
@@ -123,11 +123,11 @@ test("search options: limit & offset", () => {
 
 	assert.deepStrictEqual(idx.search("apple", "prefix").length, 10);
 	assert.deepStrictEqual(idx.search("apple", "prefix", { limit: 3 }).length, 3);
-	assert.deepStrictEqual(idx.search("apple", "prefix", { offset: 2, limit: 3 }).length, 3);
 	assert.deepStrictEqual(
-		idx.search("apple", "prefix", { offset: 9 }).length,
-		1
+		idx.search("apple", "prefix", { offset: 2, limit: 3 }).length,
+		3,
 	);
+	assert.deepStrictEqual(idx.search("apple", "prefix", { offset: 9 }).length, 1);
 });
 
 test("custom distance function", () => {
@@ -155,7 +155,7 @@ test("custom distance: Damerau via levenshteinDistance", () => {
 			maxDistance: 1,
 			distanceFn: damerau,
 		}),
-		["a"]
+		["a"],
 	);
 });
 
@@ -223,7 +223,7 @@ test("restore with unsupported version throws", () => {
 	const idx = new Searchable();
 	assert.throws(
 		() => idx.restore({ version: "99.0", words: {} }),
-		(e: unknown) => e instanceof Error && e.message.includes("restoring")
+		(e: unknown) => e instanceof Error && e.message.includes("restoring"),
 	);
 });
 

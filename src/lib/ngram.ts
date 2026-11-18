@@ -31,7 +31,7 @@ export function createNgrams(
 	options: Partial<{
 		// if empty will skip padding altogether
 		padChar: string;
-	}> = {}
+	}> = {},
 ): string[] {
 	// Validate input
 	if (typeof normalizedText !== "string") {

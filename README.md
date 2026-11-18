@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Customizable fast text search index featuring:
+
 - Extremely fast "exact" word matching
 - Super fast word "prefix" searching (catches the beginning of words)
 - Reasonably fast "fuzzy" searching (handles typos and partial matches)
@@ -26,6 +27,7 @@ records, with tens of thousands of words in total. The same data is used in
 the [real world example](https://searchable.meres.sk/example/) where you can test it by yourself.
 
 Rough numbers on an M2 (Node 26, `pnpm run bench`):
+
 - exact: ~30 µs per query
 - prefix: ~200 µs (trie) / ~750 µs (inverted)
 - fuzzy: ~2 ms (trie) / ~11 ms (inverted)
@@ -62,9 +64,11 @@ index.search('recieve', 'fuzzy', { maxDistance: 1, distanceFn: damerau });
 ```
 
 ## Real world example
+
 See https://searchable.meres.sk/example/
 
 ## Installation
+
 ```sh
 npm install @marianmeres/searchable
 ```
@@ -73,6 +77,7 @@ deno add jsr:@marianmeres/searchable
 ```
 
 ## Basic usage
+
 ```js
 import { Searchable } from '@marianmeres/searchable';
 ```
@@ -97,6 +102,7 @@ assert(results[0] === '007');
 ```
 
 ### Batch add, update, remove
+
 ```ts
 index.addBatch({ d1: 'alpha', d2: 'beta' });
 index.replace('d1', 'alpha updated');   // atomic "remove old + add new"
@@ -105,12 +111,14 @@ index.hasDocId('d1');                    // => true
 ```
 
 ### Persist + restore
+
 ```ts
 const dump = index.dump();                                    // string
 const restored = Searchable.fromDump(dump, { index: 'trie' }); // can switch index type
 ```
 
 ### Export the trie as a nested object
+
 The trie index can project itself into a plain nested object (each key is one
 character, leaves are `{}`) — handy for serializing into a store that can query
 nested JSON, e.g. a Postgres JSONB column for SQL-side prefix matching.
@@ -134,6 +142,7 @@ The optional `terminalMarker` adds an end-of-word sentinel so you can tell a
 complete word (`bar`) from a prefix of another (`barn`). See [API.md](API.md#tochartrie).
 
 ### Debug the pipeline
+
 ```ts
 index.explainQuery('The Hello World!');
 // {
@@ -204,6 +213,7 @@ const index = new Searchable({
 Both implementations provide the same API, but have different performance characteristics.
 
 ### Inverted Index (default)
+
 ```typescript
 const index = new Searchable({ index: "inverted" });
 ```
@@ -214,6 +224,7 @@ const index = new Searchable({ index: "inverted" });
 - **Use when:** you have < 100k unique words, or fuzzy search is rare.
 
 ### Trie Index
+
 ```typescript
 const index = new Searchable({ index: "trie" });
 ```
@@ -226,6 +237,7 @@ const index = new Searchable({ index: "trie" });
 - **Use when:** prefix or fuzzy is your primary path; or you have a large vocabulary.
 
 ### Recommendation
+
 For typical mixed workloads since v2.5.0, **trie** is usually the better pick.
 Inverted remains a sensible default for small indexes and is simpler to reason
 about. Either way, run the [bench script](bench/bench.ts) against your own data
@@ -241,21 +253,21 @@ Node LTS (`.node-version`), pnpm, Biome, `node:test`. The source is erasable-onl
 TypeScript that Node runs directly in the tests; `dist/` is built only for publishing to
 npm. JSR is served the `.ts` source (`jsr.json`).
 
-| Command | Does |
-| --- | --- |
-| `pnpm install` | installs the dev tooling |
-| `pnpm test` / `pnpm run test:watch` | `node --test` over `tests/**/*.test.ts` |
-| `pnpm run test:deno` | the same suite on Deno, resolved as JSR consumers see it |
-| `pnpm run typecheck` | `tsc --noEmit` over `src`, `tests`, `scripts` and `bench` |
-| `pnpm run lint` / `pnpm run format` | `biome check .` read-only / with `--write` |
-| `pnpm run ci` | typecheck + lint + test, what CI runs |
-| `pnpm run bench` | the [bench script](bench/bench.ts) ([mitata](https://github.com/evanwashere/mitata)) |
-| `pnpm run build` | `tsc -p tsconfig.build.json` → `dist/` |
-| `pnpm run example:build` | type-checks and bundles `example/src` → `example/dist/bundle.js` |
-| `pnpm run example:dev` | the same, rebuilding on change |
-| `pnpm run example:theme [name]` | regenerates `example/theme.css` from a design-tokens theme |
-| `pnpm run jsr:check` | `deno publish --dry-run` with the `package.json` version |
-| `pnpm run rp` / `pnpm run rpm` | patch / minor release, then publish to npm and JSR |
+| Command                             | Does                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------ |
+| `pnpm install`                      | installs the dev tooling                                                             |
+| `pnpm test` / `pnpm run test:watch` | `node --test` over `tests/**/*.test.ts`                                              |
+| `pnpm run test:deno`                | the same suite on Deno, resolved as JSR consumers see it                             |
+| `pnpm run typecheck`                | `tsc --noEmit` over `src`, `tests`, `scripts` and `bench`                            |
+| `pnpm run lint` / `pnpm run format` | `biome check .` read-only / with `--write`                                           |
+| `pnpm run ci`                       | typecheck + lint + test, what CI runs                                                |
+| `pnpm run bench`                    | the [bench script](bench/bench.ts) ([mitata](https://github.com/evanwashere/mitata)) |
+| `pnpm run build`                    | `tsc -p tsconfig.build.json` → `dist/`                                               |
+| `pnpm run example:build`            | type-checks and bundles `example/src` → `example/dist/bundle.js`                     |
+| `pnpm run example:dev`              | the same, rebuilding on change                                                       |
+| `pnpm run example:theme [name]`     | regenerates `example/theme.css` from a design-tokens theme                           |
+| `pnpm run jsr:check`                | `deno publish --dry-run` with the `package.json` version                             |
+| `pnpm run rp` / `pnpm run rpm`      | patch / minor release, then publish to npm and JSR                                   |
 
 The example is served from the repo (the root `index.html` redirects to `example/`), so
 open it over `http://` from any static server after `pnpm run example:build`.

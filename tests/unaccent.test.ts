@@ -5,14 +5,14 @@ import { unaccent } from "../src/lib/unaccent.ts";
 test("unaccent works", () => {
 	assert.deepStrictEqual(
 		unaccent("Příliš žluťoučký kůň úpěl ďábelské ódy"),
-		"Prilis zlutoucky kun upel dabelske ody"
+		"Prilis zlutoucky kun upel dabelske ody",
 	);
 
 	assert.deepStrictEqual(
 		unaccent(
-			"Vypätá dcéra grófa Maxwella s IQ nižším ako kôň núti čeľaď hrýzť hŕbu jabĺk"
+			"Vypätá dcéra grófa Maxwella s IQ nižším ako kôň núti čeľaď hrýzť hŕbu jabĺk",
 		),
-		"Vypata dcera grofa Maxwella s IQ nizsim ako kon nuti celad hryzt hrbu jablk"
+		"Vypata dcera grofa Maxwella s IQ nizsim ako kon nuti celad hryzt hrbu jablk",
 	);
 });
 

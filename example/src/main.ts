@@ -104,13 +104,9 @@ const prefersDark = (): boolean =>
 const applyTheme = (dark: boolean): void => {
 	const root = document.documentElement;
 	root.classList.toggle("dark", dark);
-	const bg = getComputedStyle(root)
-		.getPropertyValue("--stuic-color-background")
-		.trim();
+	const bg = getComputedStyle(root).getPropertyValue("--stuic-color-background").trim();
 	if (bg) {
-		document
-			.querySelector('meta[name="theme-color"]')
-			?.setAttribute("content", bg);
+		document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);
 	}
 };
 
@@ -167,7 +163,9 @@ const app = createView((track) => {
 				String(m.year),
 				m.directors.join(", "),
 				m.genres.join(", "),
-			].filter(Boolean).join(" · ");
+			]
+				.filter(Boolean)
+				.join(" · ");
 			const cast = m.actors
 				.map((a, i) => (m.characters[i] ? `${a} (${m.characters[i]})` : a))
 				.filter(Boolean)
@@ -181,68 +179,76 @@ const app = createView((track) => {
 	};
 
 	// Enable the input once data is loaded.
-	track(ready.subscribe((v) => {
-		input.disabled = !v;
-	}));
+	track(
+		ready.subscribe((v) => {
+			input.disabled = !v;
+		}),
+	);
 
 	// A load failure short-circuits everything else.
-	track(loadError.subscribe((msg) => {
-		if (!msg) return;
-		setStatus(msg, true);
-		r.results.replaceChildren();
-		r.empty.hidden = true;
-	}));
+	track(
+		loadError.subscribe((msg) => {
+			if (!msg) return;
+			setStatus(msg, true);
+			r.results.replaceChildren();
+			r.empty.hidden = true;
+		}),
+	);
 
 	// Drive the status line + result list off the search result.
-	track(result.subscribe((res) => {
-		if (loadError.get()) return;
+	track(
+		result.subscribe((res) => {
+			if (loadError.get()) return;
 
-		if (!res) {
-			setStatus("Loading movie data…");
-			r.results.replaceChildren();
-			r.empty.hidden = true;
-			return;
-		}
+			if (!res) {
+				setStatus("Loading movie data…");
+				r.results.replaceChildren();
+				r.empty.hidden = true;
+				return;
+			}
 
-		if (!query.get().trim()) {
+			if (!query.get().trim()) {
+				setStatus(
+					`Ready — ${fmt(totalDocs)} movies indexed. Start typing to search.`,
+				);
+				r.results.replaceChildren();
+				r.empty.hidden = true;
+				return;
+			}
+
+			const { docIds, duration } = res;
+			if (docIds.length === 0) {
+				setStatus(`No matches in ${duration.toFixed(1)} ms.`);
+				r.results.replaceChildren();
+				r.empty.hidden = false;
+				return;
+			}
+
+			const shown = docIds.slice(0, RENDER_LIMIT).map((id) => docs[id]);
+			const capped =
+				docIds.length > RENDER_LIMIT ? ` — showing first ${RENDER_LIMIT}` : "";
 			setStatus(
-				`Ready — ${fmt(totalDocs)} movies indexed. Start typing to search.`,
+				`${fmt(docIds.length)} ${docIds.length === 1 ? "match" : "matches"} of ` +
+					`${fmt(totalDocs)} in ${duration.toFixed(1)} ms${capped}.`,
 			);
-			r.results.replaceChildren();
 			r.empty.hidden = true;
-			return;
-		}
-
-		const { docIds, duration } = res;
-		if (docIds.length === 0) {
-			setStatus(`No matches in ${duration.toFixed(1)} ms.`);
-			r.results.replaceChildren();
-			r.empty.hidden = false;
-			return;
-		}
-
-		const shown = docIds.slice(0, RENDER_LIMIT).map((id) => docs[id]);
-		const capped = docIds.length > RENDER_LIMIT
-			? ` — showing first ${RENDER_LIMIT}`
-			: "";
-		setStatus(
-			`${fmt(docIds.length)} ${docIds.length === 1 ? "match" : "matches"} of ` +
-				`${fmt(totalDocs)} in ${duration.toFixed(1)} ms${capped}.`,
-		);
-		r.empty.hidden = true;
-		renderMovies(shown);
-	}));
+			renderMovies(shown);
+		}),
+	);
 
 	// One delegated listener tree for the whole view (events bubble to `el`).
-	track(delegate(el, {
-		setQuery: (_e, t) => setQuery((t as HTMLInputElement).value),
-		setStrategy: (_e, t) => strategy.set((t as HTMLInputElement).value as Strategy),
-		setAccent: (_e, t) => {
-			accentSensitive.set((t as HTMLInputElement).checked);
-			if (totalDocs > 0) buildIndex(); // re-index, then re-search via the nonce
-		},
-		toggleTheme: () => toggleTheme(),
-	}));
+	track(
+		delegate(el, {
+			setQuery: (_e, t) => setQuery((t as HTMLInputElement).value),
+			setStrategy: (_e, t) =>
+				strategy.set((t as HTMLInputElement).value as Strategy),
+			setAccent: (_e, t) => {
+				accentSensitive.set((t as HTMLInputElement).checked);
+				if (totalDocs > 0) buildIndex(); // re-index, then re-search via the nonce
+			},
+			toggleTheme: () => toggleTheme(),
+		}),
+	);
 
 	r.version.textContent = `v${VERSION}`;
 

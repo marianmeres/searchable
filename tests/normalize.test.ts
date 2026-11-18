@@ -10,6 +10,6 @@ test("normalize works", () => {
 	// effectively no-op
 	assert.deepStrictEqual(
 		normalize("Kôň", { caseSensitive: true, accentSensitive: true }),
-		"Kôň"
+		"Kôň",
 	);
 });
