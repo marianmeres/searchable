@@ -1,0 +1,84 @@
+{
+  "name": "@marianmeres/searchable",
+  "version": "2.10.0",
+  "description": "Customizable fast in-memory text search index with exact, prefix and fuzzy word matching, for autocomplete, typeahead and document filtering. Inverted and trie indexes, Levenshtein ranking with a pluggable distance function, Unicode-safe, accent folding.",
+  "license": "MIT",
+  "author": "Marian Meres",
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/mod.js",
+  "types": "./dist/mod.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/mod.d.ts",
+      "import": "./dist/mod.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "API.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marianmeres/searchable.git"
+  },
+  "bugs": {
+    "url": "https://github.com/marianmeres/searchable/issues"
+  },
+  "homepage": "https://github.com/marianmeres/searchable#readme",
+  "keywords": [
+    "search",
+    "full-text-search",
+    "search-index",
+    "inverted-index",
+    "trie",
+    "autocomplete",
+    "typeahead",
+    "fuzzy-search",
+    "prefix-search",
+    "levenshtein",
+    "damerau-levenshtein",
+    "n-gram",
+    "unaccent"
+  ],
+  "scripts": {
+    "build": "pnpm run clean && tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "test:watch": "node --test --watch \"tests/**/*.test.ts\"",
+    "test:deno": "deno test --no-lock --config jsr.json tests/",
+    "jsr:check": "deno publish --dry-run --allow-dirty --set-version \"$npm_package_version\"",
+    "ci": "pnpm run typecheck && pnpm run lint && pnpm test",
+    "prepublishOnly": "pnpm run ci && pnpm run build",
+    "bench": "node bench/bench.ts",
+    "example:version": "node scripts/gen-example-version.ts",
+    "example:theme": "node scripts/gen-example-theme.ts",
+    "example:build": "pnpm run example:version && bundle --root example/src --entry main.ts --outdir example/dist --strict --minify",
+    "example:dev": "pnpm run example:version && bundle --root example/src --entry main.ts --outdir example/dist --watch --watch-dir example/src",
+    "release": "npx --yes @marianmeres/release@^2.2.0 --before-commit \"pnpm run example:build\"",
+    "publish:jsr": "pnpm run test:deno && deno publish --set-version \"$npm_package_version\"",
+    "publish:all": "pnpm publish && pnpm run publish:jsr",
+    "rp": "pnpm run release -y && pnpm run publish:all",
+    "rpm": "pnpm run release minor -y && pnpm run publish:all"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "@marianmeres/bundle": "^1.0.0",
+    "@marianmeres/design-tokens": "^1.20.0",
+    "@marianmeres/vanilla": "^1.10.0",
+    "@types/node": "^26.6.6",
+    "mitata": "^1.0.34",
+    "typescript": "^7.0.2"
+  }
+}

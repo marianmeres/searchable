@@ -1,3 +1,4 @@
+import { bench, run } from "mitata";
 import { Searchable } from "../src/searchable.ts";
 import { movies } from "./movies.js";
 
@@ -58,59 +59,43 @@ function randomQuery() {
 	return queries[getRandomIntInclusive(0, queries.length - 1)];
 }
 
-Deno.bench({
-	name: "trie exact",
-	fn: () => {
-		idx1.searchExact(randomQuery());
-	},
+bench("trie exact", () => {
+	idx1.searchExact(randomQuery());
 });
 
-Deno.bench({
-	name: "inverted exact",
-	fn: () => {
-		idx2.searchExact(randomQuery());
-	},
+bench("inverted exact", () => {
+	idx2.searchExact(randomQuery());
 });
 
-Deno.bench({
-	name: "trie prefix",
-	fn: () => {
-		idx1.searchByPrefix(randomQuery());
-	},
+bench("trie prefix", () => {
+	idx1.searchByPrefix(randomQuery());
 });
 
-Deno.bench({
-	name: "inverted prefix",
-	fn: () => {
-		idx2.searchByPrefix(randomQuery());
-	},
+bench("inverted prefix", () => {
+	idx2.searchByPrefix(randomQuery());
 });
 
-Deno.bench({
-	name: "trie fuzzy",
-	fn: () => {
-		idx1.searchFuzzy(randomQuery());
-	},
+bench("trie fuzzy", () => {
+	idx1.searchFuzzy(randomQuery());
 });
 
-Deno.bench({
-	name: "inverted fuzzy",
-	fn: () => {
-		idx2.searchFuzzy(randomQuery());
-	},
+bench("inverted fuzzy", () => {
+	idx2.searchFuzzy(randomQuery());
 });
+
+await run();
 
 /*
-$ deno bench bench/bench.ts
-    CPU | Apple M2
-Runtime | Deno 2.7.12 (aarch64-apple-darwin)
+$ pnpm run bench
+cpu: Apple M2
+runtime: node 26.13.1 (arm64-darwin)
 
-benchmark         time/iter (avg)       iter/s
------------------ ------------------------------
-trie exact               144.4 µs        6,926
-inverted exact           402.3 µs        2,486
-trie prefix              765.5 µs        1,306
-inverted prefix            1.9 ms        529
-trie fuzzy                 3.4 ms        294   (was 68.8 ms pre-v2.5.0)
-inverted fuzzy            23.1 ms        43.3
+benchmark                   avg (min … max) p75 / p99
+-------------------------------------------------------
+trie exact                    33.61 µs/iter  48.92 µs
+inverted exact                28.89 µs/iter  28.44 µs
+trie prefix                  204.02 µs/iter 200.59 µs
+inverted prefix              758.61 µs/iter 872.08 µs
+trie fuzzy                     1.93 ms/iter   2.74 ms   (was 68.8 ms pre-v2.5.0)
+inverted fuzzy                11.25 ms/iter  12.90 ms
 */

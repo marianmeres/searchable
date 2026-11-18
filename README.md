@@ -25,10 +25,10 @@ Here's the [bench script](bench/bench.ts), tested on a movie database with appro
 records, with tens of thousands of words in total. The same data is used in
 the [real world example](https://searchable.meres.sk/example/) where you can test it by yourself.
 
-Rough numbers on an M2 (Deno 2.7.x):
-- exact: ~150 µs per query
-- prefix: ~800 µs (trie) / ~2 ms (inverted)
-- fuzzy: ~3.4 ms (trie) / ~23 ms (inverted)
+Rough numbers on an M2 (Node 26, `pnpm run bench`):
+- exact: ~30 µs per query
+- prefix: ~200 µs (trie) / ~750 µs (inverted)
+- fuzzy: ~2 ms (trie) / ~11 ms (inverted)
 
 That's fast enough.
 
@@ -66,10 +66,10 @@ See https://searchable.meres.sk/example/
 
 ## Installation
 ```sh
-deno add jsr:@marianmeres/searchable
+npm install @marianmeres/searchable
 ```
 ```sh
-npm install @marianmeres/searchable
+deno add jsr:@marianmeres/searchable
 ```
 
 ## Basic usage
@@ -234,3 +234,28 @@ if you care about the last few percent.
 ## Breaking changes
 
 Full list of behavior shifts per version lives in [BC.md](BC.md).
+
+## Development
+
+Node LTS (`.node-version`), pnpm, Biome, `node:test`. The source is erasable-only
+TypeScript that Node runs directly in the tests; `dist/` is built only for publishing to
+npm. JSR is served the `.ts` source (`jsr.json`).
+
+| Command | Does |
+| --- | --- |
+| `pnpm install` | installs the dev tooling |
+| `pnpm test` / `pnpm run test:watch` | `node --test` over `tests/**/*.test.ts` |
+| `pnpm run test:deno` | the same suite on Deno, resolved as JSR consumers see it |
+| `pnpm run typecheck` | `tsc --noEmit` over `src`, `tests`, `scripts` and `bench` |
+| `pnpm run lint` / `pnpm run format` | `biome check .` read-only / with `--write` |
+| `pnpm run ci` | typecheck + lint + test, what CI runs |
+| `pnpm run bench` | the [bench script](bench/bench.ts) ([mitata](https://github.com/evanwashere/mitata)) |
+| `pnpm run build` | `tsc -p tsconfig.build.json` → `dist/` |
+| `pnpm run example:build` | type-checks and bundles `example/src` → `example/dist/bundle.js` |
+| `pnpm run example:dev` | the same, rebuilding on change |
+| `pnpm run example:theme [name]` | regenerates `example/theme.css` from a design-tokens theme |
+| `pnpm run jsr:check` | `deno publish --dry-run` with the `package.json` version |
+| `pnpm run rp` / `pnpm run rpm` | patch / minor release, then publish to npm and JSR |
+
+The example is served from the repo (the root `index.html` redirects to `example/`), so
+open it over `http://` from any static server after `pnpm run example:build`.

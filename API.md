@@ -71,7 +71,9 @@ index-agnostic, so you may pick a different `index` at restore time (e.g.
 migrate inverted → trie).
 
 ```typescript
-const trie = Searchable.fromDump(await Deno.readTextFile('./dump.json'), {
+import { readFile } from 'node:fs/promises';
+
+const trie = Searchable.fromDump(await readFile('./dump.json', 'utf8'), {
   index: 'trie',
 });
 ```

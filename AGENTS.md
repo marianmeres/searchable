@@ -3,11 +3,15 @@
 ## Package Overview
 
 - **Name**: @marianmeres/searchable
-- **Version**: 2.5.0
+- **Version**: see `package.json` (the version of record)
 - **License**: MIT
-- **Runtime**: Deno (primary), Node.js (via NPM)
-- **Language**: TypeScript
+- **Runtime**: runtime-neutral library (web standards only, no runtime APIs); Node LTS
+  (`.node-version`) for tooling and tests
+- **Language**: TypeScript (erasable-only)
 - **Type**: Library (text search index)
+- **Registries**: npm gets `dist/` (manifest `package.json`); JSR gets the `.ts` source
+  (manifest `jsr.json`, no version)
+- **Tooling**: pnpm, `node:test`, `tsc` (type gate + npm build), Biome (format + lint)
 
 ## Purpose
 
@@ -32,7 +36,17 @@ src/
     ├── unaccent.ts           # NFD strip + extra precomposed-letter folds
     ├── levenshtein.ts        # Code-point Levenshtein (+ optional Damerau)
     ├── ngram.ts              # Character n-gram generation
-    └── intersect.ts          # Set intersection utility
+    └── intersect.ts          # Set intersection utility (vendored from @std/collections)
+
+tests/                        # node:test suites (*.test.ts), import ../src/*.ts
+bench/bench.ts                # mitata benchmark over bench/movies.js (~2500 movies)
+example/                      # browser playground: src/main.ts → dist/bundle.js (committed)
+scripts/                      # example generators (version, theme), run on Node
+package.json                  # manifest of record: version, npm exports, scripts, dev deps
+jsr.json                      # JSR manifest: exports, Deno lib, publish.include (no version)
+tsconfig.json                 # type gate (src, tests, scripts, bench; noEmit)
+tsconfig.build.json           # src → dist (ESM + .d.ts) for npm
+example/tsconfig.json         # DOM-typed config for the example (bundle --strict)
 ```
 
 ## Public API
@@ -265,27 +279,44 @@ sort by min distance, then limit/offset
 ## Test Commands
 
 ```bash
-deno task test               # All tests
-deno task test:watch         # Watch mode
-deno bench bench/bench.ts    # Benchmarks
+pnpm install                 # dev tooling
+pnpm test                    # All tests (node --test)
+pnpm run test:watch          # Watch mode
+pnpm run test:deno           # Same suite on Deno, via jsr.json (before a release)
+pnpm run ci                  # typecheck + lint + test (what CI runs)
+pnpm run bench               # Benchmarks (mitata)
 ```
 
 ## Build Commands
 
 ```bash
-deno task npm:build          # Build NPM package
-deno task npm:publish        # Build and publish to NPM
-deno publish                 # Publish to JSR
-deno task rp                 # Release patch + publish
-deno task rpm                # Release minor + publish
+pnpm run build               # tsc → dist/ (npm)
+pnpm run jsr:check           # deno publish --dry-run with the package.json version
+pnpm run example:build       # type-check + bundle example/src → example/dist/bundle.js
+pnpm run format              # Biome, before committing
+pnpm run rp                  # Release patch + publish npm and JSR (human action)
+pnpm run rpm                 # Release minor + publish npm and JSR (human action)
 ```
 
 ## Dependencies
 
-- `@std/assert`    — testing assertions
-- `@std/fs`        — file system utilities (build only)
-- `@std/path`      — path utilities (build only)
-- `@marianmeres/npmbuild` — NPM build tooling
+- Runtime: none.
+- Dev: `typescript`, `@types/node`, `@biomejs/biome`, `mitata` (bench),
+  `@marianmeres/bundle` (example bundler), `@marianmeres/vanilla` +
+  `@marianmeres/design-tokens` (example UI and theme).
+
+## Conventions
+
+1. **Runtime policy**: Node at the keyboard, npm as the registry. No `Deno.*`, `Bun.*`,
+   `jsr:` or `npm:` specifiers in source, tests or scripts. The suite runs on Node (the
+   gate) and on Deno (`test:deno`), so tests use only `node:test` + `node:assert/strict`.
+2. **Erasable TypeScript**: no `enum`, `namespace`, constructor parameter properties;
+   `import type` for type-only imports; relative imports keep their `.ts` extension
+   (`tsc` rewrites them to `.js` for npm). Node strips types and never checks them:
+   `pnpm run typecheck` is the only type gate.
+3. **Formatting**: Biome (tabs, 4 wide, 90 columns, double quotes); manifests at 2
+   spaces. Data files (`bench/movies.js`, `example/movies.json`), vendored
+   `example/reboot.css` and generated `example/theme.css` are excluded.
 
 ## Common Patterns
 

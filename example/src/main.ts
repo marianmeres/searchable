@@ -1,7 +1,3 @@
-/// <reference no-default-lib="true" />
-/// <reference lib="dom" />
-/// <reference lib="dom.iterable" />
-/// <reference lib="esnext" />
 /**
  * Example app for `@marianmeres/searchable`.
  *
@@ -14,10 +10,10 @@
  * a single delegated listener tree (`delegate`). All wiring is torn down by the
  * view's `track()`-based lifecycle.
  *
- * This is browser code: the triple-slash lib references above type it against the
- * DOM (the repo's `deno.json` targets the Deno runtime for the library itself).
+ * This is browser code: `example/tsconfig.json` types it against the DOM (the root
+ * `tsconfig.json` targets Node, for the library, its tests and scripts).
  *
- * Bundle with: `deno task example:build` (→ `example/dist/bundle.js`).
+ * Bundle with: `pnpm run example:build` (→ `example/dist/bundle.js`).
  */
 import {
 	computed,

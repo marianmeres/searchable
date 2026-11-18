@@ -1,0 +1,12 @@
+{
+	// The example is browser code: typed against the DOM, not Node. `pnpm run
+	// example:build` checks it with this config (bundle --strict picks the nearest
+	// tsconfig.json); it stays out of the root type gate because it imports
+	// src/version.generated.ts, which only exists after `pnpm run example:version`.
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"lib": ["es2025", "dom", "dom.iterable"],
+		"types": []
+	},
+	"include": ["src"]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@marianmeres/searchable",
+  "exports": "./src/mod.ts",
+  "compilerOptions": {
+    "lib": ["deno.window"]
+  },
+  "publish": {
+    "include": [
+      "src/**/*.ts",
+      "tests/**/*.ts",
+      "bench/**",
+      "scripts/**/*.ts",
+      "docs/*.md",
+      "example/**",
+      "index.html",
+      "README.md",
+      "API.md",
+      "AGENTS.md",
+      "BC.md",
+      "CLAUDE.md",
+      "LICENSE",
+      ".editorconfig"
+    ]
+  }
+}

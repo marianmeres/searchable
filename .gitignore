@@ -1,4 +1,28 @@
-.DS_Store
-.npm-dist
+node_modules/
+# root only: example/dist/bundle.js is committed (the example is served from the repo)
+/dist/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+# pnpm's lockfile is the one committed; another installer must not add a second
+package-lock.json
+npm-shrinkwrap.json
+bun.lock
+bun.lockb
+yarn.lock
+deno.lock
+
+# written by `pnpm run example:version` (the example:* scripts run it first)
 example/src/version.generated.ts
+
 tmp/*
+!tmp/.gitkeep
+*.log
+
+.DS_Store
+.idea/
+.vscode/
+.claude/settings.local.json
