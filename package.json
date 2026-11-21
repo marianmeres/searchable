@@ -1,6 +1,6 @@
 {
   "name": "@marianmeres/searchable",
-  "version": "2.10.1",
+  "version": "2.10.2",
   "description": "Customizable fast in-memory text search index with exact, prefix and fuzzy word matching, for autocomplete, typeahead and document filtering. Inverted and trie indexes, Levenshtein ranking with a pluggable distance function, Unicode-safe, accent folding.",
   "license": "MIT",
   "author": "Marian Meres",
