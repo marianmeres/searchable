@@ -1,251 +1,306 @@
 # @marianmeres/searchable
 
-[![NPM version](https://img.shields.io/npm/v/@marianmeres/searchable.svg)](https://www.npmjs.com/package/@marianmeres/searchable)
-[![JSR version](https://jsr.io/badges/@marianmeres/searchable)](https://jsr.io/@marianmeres/searchable)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![NPM](https://img.shields.io/npm/v/@marianmeres/searchable)](https://www.npmjs.com/package/@marianmeres/searchable)
+[![JSR](https://jsr.io/badges/@marianmeres/searchable)](https://jsr.io/@marianmeres/searchable)
+[![License](https://img.shields.io/npm/l/@marianmeres/searchable)](LICENSE)
 
-Customizable fast text search index featuring:
+A small in-memory text search index. You hand it strings and document IDs, and it hands
+back the IDs that match a query, in one of three ways:
 
-- Extremely fast "exact" word matching
-- Super fast word "prefix" searching (catches the beginning of words)
-- Reasonably fast "fuzzy" searching (handles typos and partial matches)
+- **exact**: extremely fast whole-word matching
+- **prefix**: super fast matching on the beginning of words
+- **fuzzy**: reasonably fast matching that forgives typos
 
-Great for quickly filtering through documents you already have in memory
-(like for autocomplete suggestions or typeahead features).
+It is made for filtering documents you already hold in memory: autocomplete, typeahead,
+the search box above a list. It has no dependencies and runs in Node, Deno and the
+browser.
 
-When you use prefix or fuzzy search, results get ranked by how close they match your
-search terms (using Levenshtein distance by default; pluggable since v2.5.0).
+It is not a full-text search engine. Results are ordered by how closely the words match,
+and there is no relevance scoring (no TF-IDF, no BM25).
 
-> **Upgrading from 2.4.x?** See [BC.md](BC.md) for behavior changes in 2.5.0.
-> The short version: query-side `normalizeWord`, extended unaccent,
-> Unicode-safe distance, and a ~20× faster trie fuzzy.
-
-## Extremely, Super, Reasonably... How fast is it really?
-
-Here's the [bench script](bench/bench.ts), tested on a movie database with approx ~2500
-records, with tens of thousands of words in total. The same data is used in
-the [real world example](https://searchable.meres.sk/example/) where you can test it by yourself.
-
-Rough numbers on an M2 (Node 26, `pnpm run bench`):
-
-- exact: ~30 µs per query
-- prefix: ~200 µs (trie) / ~750 µs (inverted)
-- fuzzy: ~2 ms (trie) / ~11 ms (inverted)
-
-That's fast enough.
-
-## Choosing the right search strategy: Exact, Prefix, or Fuzzy?
-
-Your optimal search strategy depends on several factors:
-
-- Document volume (smaller collections often benefit from exact matching)
-- Document characteristics (technical terminology vs. conversational language)
-- Query length (shorter terms typically require more precision)
-- Use case sensitivity (financial identifiers vs. content descriptions)
-- Search interaction model (real-time typeahead vs. deliberate search submissions)
-
-The decision is rarely straightforward. Consider implementing a hybrid approach that
-combines multiple strategies for optimal results. Be careful with the fuzzy search approach.
-
-## Know your Fuzzy
-
-Be aware that the fuzzy search might give you unexpected results.
-Effecting factors are **query words count**, **query words length** and their
-**similarity** to potential matches.
-
-Since v2.5.0 you can replace Levenshtein with any distance function per call:
-
-```ts
-import { levenshteinDistance } from '@marianmeres/searchable';
-
-// Damerau-Levenshtein recognises transpositions (teh ↔ the) as 1 edit.
-const damerau = (a, b) => levenshteinDistance(a, b, { damerau: true });
-index.search('recieve', 'fuzzy', { maxDistance: 1, distanceFn: damerau });
-```
-
-## Real world example
-
-See https://searchable.meres.sk/example/
+Try it on 2,516 movies in the [live example](https://searchable.meres.sk/example/).
 
 ## Installation
 
 ```sh
 npm install @marianmeres/searchable
 ```
+
 ```sh
 deno add jsr:@marianmeres/searchable
 ```
 
-## Basic usage
-
-```js
-import { Searchable } from '@marianmeres/searchable';
-```
-```js
-// create instance
-const index = new Searchable(options);
-
-// add a searchable string with its document ID reference
-index.add('james bond', '007');
-
-// search for it
-const results = index.search(
-    'Bond. James Bond.',
-    // you can provide a desired strategy ("prefix" by default)
-    'exact' | 'prefix' | 'fuzzy',
-    // optional: pagination + custom distance function
-    { limit: 10, offset: 0, maxDistance: 2 }
-);
-
-assert(results.length === 1);
-assert(results[0] === '007');
-```
-
-### Batch add, update, remove
+## Quick start
 
 ```ts
-index.addBatch({ d1: 'alpha', d2: 'beta' });
-index.replace('d1', 'alpha updated');   // atomic "remove old + add new"
-index.removeDocId('d2');
-index.hasDocId('d1');                    // => true
+import { Searchable } from "@marianmeres/searchable";
+
+const index = new Searchable();
+
+// add(text, docId)
+index.add("james bond", "007");
+index.add("jason bourne", "bourne");
+
+index.search("Bond. James Bond.");   // ["007"]
+index.search("ja");                  // ["007", "bourne"] (prefix is the default strategy)
+index.search("jmaes bnod", "fuzzy"); // ["007"] (typos forgiven)
+index.search("bourne", "exact");     // ["bourne"]
+index.search("jason bond");          // [] (every word must match, and nobody is both)
 ```
 
-### Persist + restore
+The index stores words and IDs, not your documents. Keep those wherever they already live
+and look them up by the IDs you get back.
+
+## What a search actually does
+
+Indexed text and queries go through the same steps, which is why `Bond. James Bond.` finds
+`james bond`:
+
+1. **Normalize.** Trim, lowercase and fold accents, so `Café` and `cafe` are the same
+   word, and so are `Straße` and `strasse`.
+2. **Split into words** at anything that is not a letter, a digit or an underscore. `-`
+   and `@` stay inside words by default.
+3. **Filter and rewrite**, if you asked for it: drop stopwords, run your `normalizeWord`.
+4. **Match every word.** A document is a hit only when each query word matches one of its
+   words, so more words in the query narrow the result.
+5. **Rank.** Prefix and fuzzy results come back closest match first: for the query `bon`,
+   `bond` before `bonds` before `bonding`. Exact matches are all equally exact, so they
+   come back unranked.
+
+Steps 1 to 3 are configurable through the [options](#options). To page through the
+results, pass `limit` and `offset`:
 
 ```ts
-const dump = index.dump();                                    // string
-const restored = Searchable.fromDump(dump, { index: 'trie' }); // can switch index type
+index.search("bond", "prefix", { limit: 10, offset: 20 });
+```
+
+## Extremely, Super, Reasonably... How fast is it really?
+
+The [bench script](bench/bench.ts) indexes the 2,516 movies of the live example (some
+25,000 unique words once 3-grams are counted) into both index implementations and runs
+one- and two-word queries against them. Rough numbers per query on an Apple M2 with
+Node 26 (`pnpm run bench`):
+
+| Strategy | `trie`  | `inverted` |
+| -------- | ------- | ---------- |
+| exact    | ~30 µs  | ~30 µs     |
+| prefix   | ~200 µs | ~750 µs    |
+| fuzzy    | ~2 ms   | ~11 ms     |
+
+That's fast enough.
+
+## Exact, prefix, or fuzzy?
+
+| Strategy           | A query word matches                                    | Good for                                               |
+| ------------------ | ------------------------------------------------------- | ------------------------------------------------------ |
+| `exact`            | an identical indexed word                               | IDs, codes, tags: anything where "close" means "wrong" |
+| `prefix` (default) | any indexed word that starts with it                    | typeahead and filter-as-you-type                       |
+| `fuzzy`            | any indexed word within `maxDistance` edits (default 2) | typos in fully typed words                             |
+
+Fuzzy compares whole words, so it does not cover what prefix covers. A half-typed `termin`
+is four edits short of `terminator`: prefix finds it, fuzzy does not. For a typeahead that
+also forgives typos, a simple combination is prefix first, and fuzzy only when prefix
+comes back empty:
+
+```ts
+function typeahead(query: string): string[] {
+    const hits = index.search(query, "prefix");
+    return hits.length ? hits : index.search(query, "fuzzy");
+}
+```
+
+## Know your Fuzzy
+
+Fuzzy counts the edits (insert, delete or replace one character) it takes to turn the
+query word into an indexed word, and accepts anything within `maxDistance`. That is
+precise on long words and very generous on short ones. Some numbers from the bench data:
+
+- **Short words match nearly everything.** `cat` is two edits away from `a`, and 2,261 of
+  the 2,516 movies contain the word `a`. So a fuzzy `cat` returns 2,495 movies where an
+  exact one returns 16. `maxDistance: 1` still returns 720, so short words are better
+  left to exact or prefix.
+- **Long words behave.** A fuzzy `tarantion` returns the same 11 movies as an exact
+  `tarantino`.
+- **Swapped letters cost two edits.** Plain Levenshtein reads `tarantion` as two wrong
+  letters, so at `maxDistance: 1` it finds nothing. Damerau-Levenshtein counts a swap of
+  two adjacent letters as one edit, and you can plug it in per call (or any other
+  distance function):
+
+```ts
+import { levenshteinDistance } from "@marianmeres/searchable";
+
+const damerau = (a: string, b: string) => levenshteinDistance(a, b, { damerau: true });
+
+index.search("tarantion", "fuzzy", { maxDistance: 1, distanceFn: damerau });
+```
+
+A custom `distanceFn` has a price on the trie index. The trie's fuzzy speed comes from
+pruning that is only valid for the built-in Levenshtein, so with your own function it
+compares the query against every indexed word, as the inverted index always does.
+
+## Options
+
+Every option has a default. Pass only the ones you want to change:
+
+```ts
+const index = new Searchable({ index: "trie", accentSensitive: true });
+```
+
+| Option                   | Default                                  | What it does                                                                                                                                                          |
+| ------------------------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `caseSensitive`          | `false`                                  | Treats `Foo` and `foo` as different words.                                                                                                                            |
+| `accentSensitive`        | `false`                                  | Treats `cafe` and `café` as different words. When off, folding also covers the letters Unicode does not decompose (`ß` to `ss`, `ø` to `o`, `æ` to `ae`, `ł` to `l`). |
+| `isStopword`             | `() => false`                            | `(word) => boolean`. Words it flags are left out of both the index and the query.                                                                                     |
+| `normalizeWord`          | `(word) => word`                         | Rewrites or expands each word at index and at query time. See [below](#stemming-synonyms-aliases-normalizeword).                                                      |
+| `index`                  | `"inverted"`                             | `"inverted"` or `"trie"`. See [Inverted or trie?](#inverted-or-trie).                                                                                                 |
+| `nonWordCharWhitelist`   | `"@-"`                                   | Non-word characters to keep inside words. With the default, `well-known` is one word, so `known` alone does not find it.                                              |
+| `ngramsSize`             | `0`                                      | `3`, `4`, `5` or an array of them, to match inside words. `0` turns it off. See [below](#matching-inside-words-ngramssize).                                           |
+| `querySomeWordMinLength` | `1`                                      | Returns `[]` without searching unless at least one query word is this long. Set it to 2 or 3 to ignore the first keystrokes of a typeahead.                           |
+| `defaultSearchOptions`   | `{ strategy: "prefix", maxDistance: 2 }` | What `search()` uses when the call does not say: `strategy`, `maxDistance`, `limit`, `offset`, `distanceFn`.                                                          |
+| `lastQueryHistoryLength` | `5`                                      | How many recent queries `index.lastQuery` keeps, raw and normalized.                                                                                                  |
+
+### Stemming, synonyms, aliases (`normalizeWord`)
+
+`normalizeWord` receives every word, when indexing and again when searching. Return a
+string for a one-to-one rewrite (a stemmer, a lemmatizer), or an array to expand a word
+into alternatives:
+
+```ts
+const synonyms: Record<string, string[]> = { colour: ["colour", "color"] };
+
+const index = new Searchable({
+    normalizeWord: (word) => synonyms[word] ?? word,
+});
+
+index.add("color palette", "d1");
+index.add("colour wheel", "d2");
+
+index.search("colour"); // ["d2", "d1"]
+index.search("color");  // ["d1", "d2"]
+```
+
+In a query, the alternatives of one word are OR'ed, while the separate words are still
+AND'ed: `colour wheel` means (`colour` or `color`) and `wheel`.
+
+### Matching inside words (`ngramsSize`)
+
+By default a word is found only from its beginning. With `ngramsSize: 3`, every
+three-letter slice of each word is indexed as well, so `min` finds `terminator`. The
+slices are exactly that long: for `mina` to match too, use `[3, 4]`.
+
+It is not free. On the bench data, 3-grams make the dump 3.3 times bigger (1.4 MB to
+4.5 MB), and they give fuzzy even more short words to be generous with.
+
+## Inverted or trie?
+
+Both implementations have the same API and the same dump format. They differ in where the
+time and the memory go:
+
+|           | `"inverted"` (default)           | `"trie"`                                          |
+| --------- | -------------------------------- | ------------------------------------------------- |
+| Structure | hash map from word to doc IDs    | prefix tree, one node per character               |
+| exact     | one hash lookup                  | one step per character                            |
+| prefix    | checks every indexed word        | walks to the prefix and collects what is below it |
+| fuzzy     | compares with every indexed word | walks the tree, skips branches already too far    |
+| Memory    | lower                            | higher                                            |
+
+If prefix or fuzzy is your main path, and for a typeahead it usually is, pick `"trie"`:
+the [numbers above](#extremely-super-reasonably-how-fast-is-it-really) show why.
+`"inverted"` is fine for small indexes and exact-heavy use, and it is simpler to debug.
+Either way, run the [bench script](bench/bench.ts) against your own data if you care
+about the last few percent.
+
+## More things it can do
+
+### Add, update, remove
+
+```ts
+index.addBatch({ d1: "alpha", d2: "beta" }); // or [["d1", "alpha"], ["d2", "beta"]]
+index.replace("d1", "alpha updated");        // drops d1's old words, adds the new ones
+index.removeDocId("d2");
+index.hasDocId("d1");                        // true
+index.docIdCount;                            // 1
+```
+
+`add` on an ID that is already indexed only adds words to it. When a document changes,
+use `replace`.
+
+### Save and restore
+
+```ts
+const dump = index.dump(); // a JSON string
+
+// the index type may differ from the one that produced the dump
+const restored = Searchable.fromDump(dump, { index: "trie" });
+```
+
+The dump holds the indexed words, not the options. Pass `fromDump` the same options you
+built the index with (stopwords, `normalizeWord`, case and accent sensitivity), or the
+queries will be normalized differently from the words they are looking for.
+
+### Search several indexes at once
+
+```ts
+const movies = new Searchable();
+movies.add("the terminator", "movie:1");
+
+const actors = new Searchable();
+actors.add("arnold schwarzenegger terminator", "actor:1");
+
+const all = Searchable.merge([movies, actors]);
+all.search("termin"); // ["movie:1", "actor:1"]
+```
+
+The merged result is each index's hits back to back, without duplicates. Ranking,
+`limit` and `offset` apply inside each index, not to the merged list.
+
+### Ask it what it understood
+
+When a query does not match what you expected, `explainQuery` shows what became of it:
+
+```ts
+const stopwords = new Set(["the", "a", "an"]);
+const index = new Searchable({ isStopword: (word) => stopwords.has(word) });
+
+index.explainQuery("The Hello World!");
+// {
+//   raw: "The Hello World!",
+//   normalized: "the hello world!",
+//   tokens: ["the", "hello", "world"],
+//   afterStopwords: ["hello", "world"],
+//   groups: [["hello"], ["world"]], // OR within a group, AND across groups
+//   wouldSearch: true,              // false when querySomeWordMinLength stops it
+// }
 ```
 
 ### Export the trie as a nested object
 
-The trie index can project itself into a plain nested object (each key is one
-character, leaves are `{}`) — handy for serializing into a store that can query
-nested JSON, e.g. a Postgres JSONB column for SQL-side prefix matching.
+The trie index can turn itself into a plain nested object, one character per key. That is
+handy for a store that can query nested JSON, for example a Postgres JSONB column doing
+prefix matching in SQL.
 
 ```ts
-import { Searchable, TrieIndex } from '@marianmeres/searchable';
+import { Searchable, type TrieIndex } from "@marianmeres/searchable";
 
-const index = new Searchable({ index: 'trie' });
-index.add('bar barn', 'doc1');
+const index = new Searchable({ index: "trie" });
+index.add("bar barn", "doc1");
 const trie = index.__index as TrieIndex;
 
 trie.toCharTrie();
-// { b: { a: { r: { n: {} } } } }   // is "bar" a word, or just a prefix? Ambiguous.
+// { b: { a: { r: { n: {} } } } }   is "bar" a word, or only the start of "barn"?
 
 trie.toCharTrie({ terminalMarker: true });
 // { b: { a: { r: { "$$": true, n: { "$$": true } } } } }
 //                  └ "bar" is a word    └ "barn" is a word
 ```
 
-The optional `terminalMarker` adds an end-of-word sentinel so you can tell a
-complete word (`bar`) from a prefix of another (`barn`). See [API.md](API.md#tochartrie).
+Without `terminalMarker`, a complete word cannot be told from the start of a longer one.
+See [API.md](API.md#tochartrie) for the details.
 
-### Debug the pipeline
+## API
 
-```ts
-index.explainQuery('The Hello World!');
-// {
-//   raw: 'The Hello World!',
-//   normalized: 'the hello world!',
-//   tokens: ['the', 'hello', 'world'],
-//   afterStopwords: [...],
-//   groups: [...],      // OR within a group, AND across
-//   wouldSearch: true,
-// }
-```
-
-For complete API documentation including all methods and utility functions, see [API.md](API.md).
-
-## Options
-
-```typescript
-// default options
-const index = new Searchable({
-    // Should "Foo" and "foo" be considered as distinct words? (default false)
-    caseSensitive: false,
-
-    // Should "cafe" and "café" be considered as distinct words? (default false)
-    // Beyond combining marks, also folds ß→ss, ø→o, æ→ae, œ→oe, đ→d, ł→l, þ→th, ð→d...
-    accentSensitive: false,
-
-    // Function to check whether a word should be considered a stopword (omitted
-    // from index and query).
-    isStopword: (word) => false,
-
-    // Custom normalization applied to each tokenized word at BOTH index and query time
-    // (since v2.5.0 — prior versions skipped queries, which silently broke stemmers).
-    // Return a string for 1:1 (stemmer, lemmatizer), or an array for aliases /
-    // synonym expansion. Arrays are OR'd within the group, AND'd across groups.
-    normalizeWord: (word) => word,
-
-    // Will skip search altogether if none of the query words is longer than this limit.
-    querySomeWordMinLength: 1,
-
-    // Which underlying implementation to use. Since v2.5.0 "trie" is typically the
-    // better default thanks to trie-walked fuzzy search; "inverted" remains a fine
-    // choice for small indexes or easier debugging.
-    index: "inverted" | "trie",
-
-    // By default, all non-word chars are considered as a word boundary. You can provide
-    // your own non-word whitelist of chars which should be considered as a part of the word.
-    nonWordCharWhitelist: "@-",
-
-    // How big (if any) n-grams to generate. Use 0 to not generate n-grams (the default).
-    // Reasonable value would be [3, 4]. Smaller values will increase the memory
-    // footprint and not provide any practical benefit.
-    ngramsSize: 0, // or array of values
-
-    // Defaults applied by `search()` when the caller doesn't specify.
-    defaultSearchOptions: {
-        strategy: 'prefix',
-        maxDistance: 2,
-        // limit, offset, distanceFn also supported here
-    },
-
-    // How many query strings to keep in `lastQuery.history` / `.rawHistory` (default 5).
-    lastQueryHistoryLength: 5,
-});
-```
-
-## Choosing Between Inverted and Trie Index
-
-Both implementations provide the same API, but have different performance characteristics.
-
-### Inverted Index (default)
-
-```typescript
-const index = new Searchable({ index: "inverted" });
-```
-
-- **Pros:** faster exact searches (direct hash lookup), simpler to debug,
-  lower memory overhead for most use cases.
-- **Cons:** prefix and fuzzy iterate all indexed words.
-- **Use when:** you have < 100k unique words, or fuzzy search is rare.
-
-### Trie Index
-
-```typescript
-const index = new Searchable({ index: "trie" });
-```
-
-- **Pros:** O(k) prefix descent (k = prefix length); fuzzy search walks the
-  trie with a rolling Levenshtein row and prunes whole subtrees —
-  substantially faster than a linear scan once you have a real vocabulary.
-- **Cons:** higher memory footprint (node objects + pointers); exact search
-  slightly slower (traversal vs. hash map).
-- **Use when:** prefix or fuzzy is your primary path; or you have a large vocabulary.
-
-### Recommendation
-
-For typical mixed workloads since v2.5.0, **trie** is usually the better pick.
-Inverted remains a sensible default for small indexes and is simpler to reason
-about. Either way, run the [bench script](bench/bench.ts) against your own data
-if you care about the last few percent.
-
-## Breaking changes
-
-Full list of behavior shifts per version lives in [BC.md](BC.md).
+See [API.md](API.md) for the complete reference, and [BC.md](BC.md) for behavior changes
+between versions.
 
 ## Development
 
@@ -271,3 +326,7 @@ npm. JSR is served the `.ts` source (`jsr.json`).
 
 The example is served from the repo (the root `index.html` redirects to `example/`), so
 open it over `http://` from any static server after `pnpm run example:build`.
+
+## License
+
+[MIT](LICENSE)
