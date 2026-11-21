@@ -75,8 +75,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",
     "@marianmeres/bundle": "^1.0.0",
-    "@marianmeres/design-tokens": "^1.20.0",
-    "@marianmeres/vanilla": "^1.10.0",
+    "@marianmeres/design-tokens": "^1.23.0",
+    "@marianmeres/vanilla": "^1.10.1",
     "@types/node": "^26.6.6",
     "mitata": "^1.0.34",
     "typescript": "^7.0.2"
